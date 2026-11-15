@@ -12,7 +12,7 @@ describe('симуляция мира', () => {
     sim.newGame({ seed: 7 });
     const notes: string[] = [];
     sim.bus.on('notify', (n) => notes.push(`${sim.time.stamp()} ${n.text}`));
-    sim.bus.on('radio:message', ({ msg }) => notes.push(`${sim.time.stamp()} [радио] ${msg.from}: ${msg.subject}`));
+    sim.bus.on('radio:message', ({ msg }) => notes.push(`${sim.time.stamp()} [радио] ${msg.from}: ${msg.subject}${msg.kind === 'detain' ? ' — ' + msg.body : ''}`));
     expect(sim.npcs.list.length).toBe(50);
 
     // 05:50 — построение
@@ -49,6 +49,8 @@ describe('симуляция мира', () => {
     run(sim, 27 * 60);
     console.log(sim.time.stamp(), 'поисков пути:', sim.path.searches);
     console.log(notes.slice(0, 40).join('\n'));
+    const spy = sim.npcs.byId(sim.spy.state.agents[0]?.id ?? '');
+    console.log('агент:', spy?.role, spy?.last, 'актов:', sim.spy.state.agents[0]?.count, 'улик по нему:', sim.ci.evidenceFor(spy?.id ?? '').length, 'intel противника:', Math.round(sim.enemy.state.intel), 'фронт:', JSON.stringify(sim.enemy.state.front));
     const stuck = sim.npcs.list.filter((n) => n.status === 'active' && !n.goal);
     expect(stuck.length).toBeLessThan(3);
     for (const n of sim.npcs.list) {

@@ -199,6 +199,7 @@ export class PatrolSystem {
     if (p.members.includes(o.id) || o.flags.escorted || o.goal.startsWith('detained') || o.anim === 'sleep') return;
     const sim = this.sim;
     if (o.unit === 'guard' && sim.schedule.onDuty(o)) return;
+    if (o.unit === 'external' && sim.events.visitor(o.id)) return;
     if (o.goal.startsWith('crew') || o.goal.startsWith('haul')) return;
     const since = sim.now - o.lastCheck;
     const zoneOk = sim.access.canEnter(o, o.zone);

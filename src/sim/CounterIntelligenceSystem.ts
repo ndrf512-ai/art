@@ -19,7 +19,7 @@ export class CounterIntelligenceSystem {
     cases: {} as Record<string, CaseFile>,
     clues: [] as SceneClue[],
     seq: 0,
-    detained: {} as Record<string, { since: number; by: string; where: string; issues: string[]; reviewAt: number }>,
+    detained: {} as Record<string, { since: number; by: string; where: string; issues: string[]; reviewAt: number; reviewed?: boolean }>,
     summoned: {} as Record<string, boolean>,
     convicted: [] as string[],
     wrongArrests: 0,
@@ -330,10 +330,14 @@ export class CounterIntelligenceSystem {
         this.release(id, 'проверен, канцелярская ошибка в документах исправлена, освобождён.');
         n.attitude = Math.max(0, n.attitude - 3);
         sim.radio.send(from, `Освобождён ${fullName(n)}`, `${fullName(n)} проверен. Расхождения в бумагах — канцелярская ошибка, исправлено. Освобождён.`, 'routine', 'ci', { id }, false);
+      } else if (d.reviewed) {
+        this.release(id, 'срок задержания истёк, решения командира не последовало — освобождён.');
+        sim.radio.send(from, `Освобождён ${fullName(n)}`, `Держать ${fullName(n)} дольше без вашего решения не вправе. Освобождён. Материалы остаются в деле.`, 'routine', 'ci', { id }, false);
       } else if (ci && sim.rng.chance(0.3 + ci.skill / 300)) {
+        d.reviewed = true;
         sim.radio.send(from, `${fullName(n)}: документы поддельные`, `Документы ${fullName(n)} — подделка: ${sim.docs.discrepancies(n).map((k) => FLAW_TEXT[k]).join('; ')}. Рекомендую арест и передачу дела мне.`, 'urgent', 'ci', { id }, false);
         this.addEvidence(id, 'doc', 'Экспертиза контрразведки: документы поддельные', from, 3.5);
-        d.reviewAt = now + 400;
+        d.reviewAt = now + 480;
       } else {
         this.release(id, 'проверен контрразведкой, оснований для ареста не найдено, освобождён.');
         sim.radio.send(from, `Освобождён ${fullName(n)}`, `${fullName(n)} опрошен. Объясняет расхождения ошибкой писаря. Прямых оснований держать его нет — освобождён. Рекомендую присмотреться.`, 'routine', 'ci', { id }, false);

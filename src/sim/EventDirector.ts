@@ -52,7 +52,7 @@ export class EventDirector {
   }
 
   reset(): void {
-    this.state = { scheduled: [], next: this.sim.now + 260, cooldown: {}, visitors: [], airRaidUntil: 0, airRaidJudgeAt: 0, conflict: null, urgent: null, inspection: null, log: [] };
+    this.state = { scheduled: [], next: this.sim.now + 560, cooldown: {}, visitors: [], airRaidUntil: 0, airRaidJudgeAt: 0, conflict: null, urgent: null, inspection: null, log: [] };
   }
 
   schedule(name: string, at: number, data?: any): void {
@@ -85,7 +85,7 @@ export class EventDirector {
       s.next = now + sim.rng.range(170, 380) / (1 + phase * 0.2);
       const day = sim.time.day;
       const opts: [string, number][] = [
-        ['malfunction', 2],
+        ['malfunction', 1.1],
         ['injury', 0.8],
         ['conflict', sim.relations.averages().discipline < 62 ? 2.2 : 0.9],
         ['urgent_fire', day >= 2 ? 1.6 + phase : 0],
@@ -94,7 +94,7 @@ export class EventDirector {
         ['suspicious', phase >= 1 ? 1.1 : 0.3],
         ['inspection', day >= 3 ? 0.6 : 0],
         ['shortage', day >= 3 ? 0.5 : 0],
-        ['comms', 0.5],
+        ['comms', 0.3],
       ];
       const pick = sim.rng.weighted(opts, (o) => o[1]);
       if (pick) this.fire(pick[0]);
@@ -110,14 +110,14 @@ export class EventDirector {
     const rng = sim.rng;
     switch (name) {
       case 'malfunction': {
-        if (!this.ready(name, 300)) return;
-        const pool = sim.repair.all().filter((e) => !e.broken && e.condition < 78 && e.id !== 'generator2');
+        if (!this.ready(name, 800)) return;
+        const pool = sim.repair.all().filter((e) => !e.broken && e.condition < 74 && e.id !== 'generator2' && e.id !== 'generator');
         const e = rng.weighted(pool, (x) => 100 - x.condition);
         if (e) sim.repair.breakDown(e.id as EquipmentId, 'wear');
         break;
       }
       case 'comms': {
-        if (!this.ready(name, 900) || sim.repair.get('radio').broken) return;
+        if (!this.ready(name, 2400) || sim.repair.get('radio').broken) return;
         sim.repair.breakDown('radio', 'wear');
         break;
       }

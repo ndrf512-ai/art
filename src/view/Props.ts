@@ -698,6 +698,12 @@ export function buildProp(p: PropDef, b: Batcher, M: Materials, indoor: boolean)
       b.box(m('metal'), 0.9, 0.06, 0.2, 0, 5.6, -0.1);
       break;
     }
+    case 'mirror': {
+      // рама; само отражающее стекло создаёт MirrorView
+      const mw = swap ? p.d : p.w;
+      b.box(m('woodDark'), mw + 0.12, h + 0.12, 0.04, 0, 0.25 + h / 2, -0.01);
+      break;
+    }
     case 'buttress': {
       b.box(m('concrete'), 1.0, h, 0.7, 0, h / 2, -0.15, 0, 0.035);
       b.box(m('concrete'), 1.2, 0.5, 0.9, 0, 0.25, -0.05);

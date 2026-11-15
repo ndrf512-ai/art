@@ -66,12 +66,12 @@ export function fullName(npc: { first: string; last: string; rank: number; unit:
 
 /** Документы личного состава, реестр (картотека архива) и проверка подлинности. */
 export class DocumentSystem {
-  state = { registry: {} as Record<string, PersonalDocument>, flaws: {} as Record<string, string[]>, seq: 1000 };
+  state = { registry: {} as Record<string, PersonalDocument>, flaws: {} as Record<string, string[]>, seq: 1000, checked: {} as Record<string, number> };
 
   constructor(private sim: Sim) {}
 
   reset(): void {
-    this.state = { registry: {}, flaws: {}, seq: 1000 + this.sim.rng.int(0, 400) };
+    this.state = { registry: {}, flaws: {}, seq: 1000 + this.sim.rng.int(0, 400), checked: {} };
   }
 
   /** Выписать документы и внести человека в картотеку. */
@@ -156,8 +156,19 @@ export class DocumentSystem {
   verify(npc: NpcState, checker: NpcState | null, thorough: boolean): { ok: boolean; issues: string[] } {
     const all = this.discrepancies(npc);
     const rng = this.sim.rng;
+    if (!all.length) return { ok: true, issues: [] };
+    // один и тот же проверяющий дважды в день в бумаги знакомого человека не вчитывается
+    const day = this.sim.time.day;
+    if (checker) {
+      const key = `${npc.id}|${checker.id}|${thorough ? 1 : 0}`;
+      if (this.state.checked[key] === day) return { ok: true, issues: [] };
+      this.state.checked[key] = day;
+    }
+    const forged = new Set(this.state.flaws[npc.id] ?? []);
     const p = checker ? 0.3 + checker.skill / 220 + checker.discipline / 400 + (thorough ? 0.3 : 0) - checker.fatigue / 500 : 1;
-    const found = all.filter((k) => k === 'missing' || k === 'expired' || rng.chance(p));
+    // хорошую подделку на посту распознают редко: её выдаёт сверка с картотекой
+    const pForged = checker ? (thorough ? 0.05 : 0.015) * (0.6 + checker.skill / 100) : 1;
+    const found = all.filter((k) => k === 'missing' || k === 'expired' || rng.chance(forged.has(k) ? pForged : p));
     return { ok: found.length === 0, issues: found.map((k) => FLAW_TEXT[k]) };
   }
 

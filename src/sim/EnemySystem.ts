@@ -223,6 +223,8 @@ export class EnemySystem {
         r.routeI = 1;
       }
     }
+    // пехота на переднем крае пополняется, если её не атакуют
+    for (const n of FRONT_NODES) if (s.owner[n] === 'us') s.front[n] = Math.min(100, (s.front[n] ?? 0) + gdt * 0.012);
     s.pressure = clamp(0.1 + s.phase * 0.2 + (400 - (s.front[4] + s.front[5] + s.front[6] + s.front[7])) / 900, 0, 1);
   }
 
@@ -264,7 +266,7 @@ export class EnemySystem {
         if (u.state === 'hold' || u.state === 'dugin') {
           u.camo = Math.min(0.75, u.camo + 0.03);
           if (u.camo > 0.55) u.state = 'dugin';
-          const eager = s.phase >= 2 ? 0.2 : s.phase === 1 ? 0.05 : 0.008;
+          const eager = s.phase >= 3 ? 0.14 : s.phase === 2 ? 0.03 : s.phase === 1 ? 0.004 : 0;
           if (!shelled && u.strength > 45 && u.suppress < 30 && rng.chance(eager)) {
             const r = this.route(node, u.objective);
             if (r.length > 1) {
@@ -290,9 +292,9 @@ export class EnemySystem {
           }
         } else if (u.state === 'advance' && atNode && s.owner[node] === 'us') {
           // бой за пункт
-          const k = (u.type === 'armor' ? 2.4 : 1.6) * (u.strength / 100) * (now < u.smokeUntil ? 0.2 : 1) * (u.suppress > 40 ? 0.4 : 1);
+          const k = (u.type === 'armor' ? 0.9 : 0.55) * (u.strength / 100) * (now < u.smokeUntil ? 0.2 : 1) * (u.suppress > 40 ? 0.4 : 1);
           s.front[node] = (s.front[node] ?? 60) - k;
-          u.strength -= rng.range(0.2, 1.0);
+          u.strength -= rng.range(0.3, 1.1);
           if ((s.front[node] ?? 0) <= 0) this.capture(node);
           if (u.strength < 30) {
             u.state = 'retreat';
@@ -328,7 +330,7 @@ export class EnemySystem {
           // огонь по нашему переднему краю
           const tgt = FRONT_NODES.filter((n) => s.owner[n] === 'us').sort((a, b) => Math.hypot(NODES[a].x - u.x, NODES[a].y - u.y) - Math.hypot(NODES[b].x - u.x, NODES[b].y - u.y))[0];
           if (tgt !== undefined) {
-            s.front[tgt] = Math.max(0, (s.front[tgt] ?? 0) - 0.6 * (u.strength / 100) * (0.5 + s.phase * 0.5));
+            s.front[tgt] = Math.max(0, (s.front[tgt] ?? 0) - 0.35 * (u.strength / 100) * s.phase);
             u.fireCooldown = now + rng.range(50, 130);
             if (rng.chance(0.55)) sim.recon.soundRanging(u);
           }

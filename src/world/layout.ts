@@ -332,6 +332,7 @@ export function buildLayout(): Layout {
   for (let x = 14; x <= 17; x++) spot('seat', 'barracks_table', x + 0.5, 34.5, S, { x: x + 0.5, z: 34.65, y: 0 });
   deco('bench', 16, 34.55, 0, 4, 0.35, 0.45);
   prop('stove', 28, 36, 29, 37, 0, 1.4, { heater: true });
+  deco('mirror', 12.04, 33.5, E, 0.05, 0.8, 1.5);
   prop('locker', 24, 37, 27, 37, N, 1.9);
   lampsGrid(12, 20, 29, 37, 3.0, 6, 0.85);
 
@@ -425,6 +426,7 @@ export function buildLayout(): Layout {
   prop('cabinet', 60, 18, 60, 20, E, 1.9);
   deco('wallmap', 67, 12.06, S, 3, 0.05, 1.5, { small: true });
   spot('bed', 'cmd_bed', 61.5, 14.5, E, { x: 62, z: 13.5, y: 0.5 });
+  deco('mirror', 60.04, 15.6, E, 0.05, 1.0, 1.8);
   spot('stand', 'quarters_guest', 68.5, 17.5, W);
   inter('bed', 'cmd_bed', 'Койка командира (отдых / сохранение)', 62, 13.9, 0.6);
   inter('phone', 'phone_quarters', 'Телефон', 71.5, 12.6, 0.95);
@@ -464,6 +466,7 @@ export function buildLayout(): Layout {
   spot('seat', 'officer_table', 80.5, 26.5, N, { x: 80.5, z: 26.35, y: 0 });
   spot('seat', 'officer_table', 81.5, 23.5, S, { x: 81.5, z: 23.65, y: 0 });
   prop('locker', 83, 26, 84, 27, W, 1.9);
+  deco('mirror', 80.5, 12.04, S, 0.9, 0.05, 1.7);
   lampsGrid(77, 12, 84, 27, 3.0, 7, 0.8);
 
   // Архив
