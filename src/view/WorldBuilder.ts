@@ -131,7 +131,7 @@ export function terrainHeight(x: number, z: number): number {
   return h;
 }
 
-export function buildWorld(layout: Layout, M: Materials): WorldView {
+export function buildWorld(layout: Layout, M: Materials, treeDensity = 1): WorldView {
   const grid = layout.grid;
   const group = new THREE.Group();
   group.name = 'world';
@@ -532,53 +532,48 @@ export function buildWorld(layout: Layout, M: Materials): WorldView {
 
   // ------------------------------------------------------------ лес вокруг
   {
-    const trunkGeo = new THREE.CylinderGeometry(0.12, 0.2, 1, 5);
-    trunkGeo.translate(0, 0.5, 0);
+    // дерево единичной высоты; масштабируется по месту
+    const trunkGeo = new THREE.CylinderGeometry(0.012, 0.022, 0.5, 5);
+    trunkGeo.translate(0, 0.25, 0);
     const crown: THREE.BufferGeometry[] = [];
-    for (let k = 0; k < 4; k++) {
-      const c = new THREE.ConeGeometry(1.5 - k * 0.3, 2.0, 6);
-      c.translate(0, 0.42 + k * 0.19, 0);
+    for (let k = 0; k < 3; k++) {
+      const c = new THREE.ConeGeometry(0.2 - k * 0.05, 0.4, 5, 1, true);
+      c.translate(0, 0.42 + k * 0.22, 0);
       crown.push(c);
     }
     const places: { x: number; z: number; h: number; s: number }[] = [];
-    for (let gz = -200; gz < 330; gz += 4.2) {
-      for (let gx = -240; gx < 390; gx += 4.2) {
-        const r = hash2(Math.round(gx * 10), Math.round(gz * 10), 5);
-        const x = gx + hash2(Math.round(gx * 10), Math.round(gz * 10), 6) * 4;
-        const z = gz + hash2(Math.round(gx * 10), Math.round(gz * 10), 7) * 4;
+    const STEP = 5.2;
+    for (let gz = -160; gz < 300; gz += STEP) {
+      for (let gx = -180; gx < 330; gx += STEP) {
+        const ix = Math.round(gx * 10);
+        const iz = Math.round(gz * 10);
+        const x = gx + hash2(ix, iz, 6) * STEP;
+        const z = gz + hash2(ix, iz, 7) * STEP;
         const inMap = x > -3 && x < MAP_W + 3 && z > FACADE_Z - 2 && z < MAP_H + 2;
         if (inMap) continue;
         if (z > MAP_H - 4 && Math.abs(x - 57.5) < 7) continue;
-        const dens = 0.3 + 0.6 * fbm(x * 0.02, z * 0.02, 3, 91);
-        const dist = Math.hypot(x - 75, z - 80);
-        if (r > dens * (dist > 260 ? 0.35 : 0.8)) continue;
-        places.push({ x, z, h: 7 + hash2(Math.round(x), Math.round(z), 8) * 8, s: 0.8 + hash2(Math.round(x), Math.round(z), 9) * 0.7 });
+        const dist = Math.hypot(x - 75, z - 85);
+        if (dist > 250) continue;
+        const dens = (0.35 + 0.6 * fbm(x * 0.02, z * 0.02, 3, 91)) * treeDensity * (dist > 170 ? 0.5 : 1);
+        if (hash2(ix, iz, 5) > dens) continue;
+        places.push({ x, z, h: 8 + hash2(ix, iz, 8) * 9, s: 0.85 + hash2(ix, iz, 9) * 0.5 });
       }
     }
-    const trunks = new THREE.InstancedMesh(trunkGeo, M.get('bark', false), places.length);
     const dummy = new THREE.Object3D();
-    places.forEach((p, i) => {
-      dummy.position.set(p.x, terrainHeight(p.x, p.z) - 0.3, p.z);
-      dummy.scale.set(p.s, p.h, p.s);
-      dummy.rotation.set(0, 0, 0);
-      dummy.updateMatrix();
-      trunks.setMatrixAt(i, dummy.matrix);
-    });
-    trunks.frustumCulled = false;
-    group.add(trunks);
-    const foliageMat = M.get('foliage', false);
-    crown.forEach((cg, k) => {
-      const inst = new THREE.InstancedMesh(cg, foliageMat, places.length);
+    const place = (inst: THREE.InstancedMesh, rot: number): void => {
       places.forEach((p, i) => {
-        dummy.position.set(p.x, terrainHeight(p.x, p.z) - 0.3, p.z);
-        dummy.scale.set(p.s * (1.5 + (k === 0 ? 0.2 : 0)), p.h, p.s * (1.5 + (k === 0 ? 0.2 : 0)));
-        dummy.rotation.set(0, hash2(i, k, 3) * 6.28, 0);
+        dummy.position.set(p.x, terrainHeight(p.x, p.z) - 0.4, p.z);
+        dummy.scale.set(p.h * p.s, p.h, p.h * p.s);
+        dummy.rotation.set(0, hash2(i, rot, 3) * 6.28, 0);
         dummy.updateMatrix();
         inst.setMatrixAt(i, dummy.matrix);
       });
       inst.frustumCulled = false;
       group.add(inst);
-    });
+    };
+    place(new THREE.InstancedMesh(trunkGeo, M.get('bark', false), places.length), 0);
+    const foliageMat = M.get('foliage', false);
+    crown.forEach((cg, k) => place(new THREE.InstancedMesh(cg, foliageMat, places.length), k + 1));
   }
 
   // ------------------------------------------------------------ подвижные ворота
