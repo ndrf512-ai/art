@@ -35,6 +35,8 @@ export interface Events {
   'arty:report': { gun: GunId | null; text: string };
   'arty:mission': { mission: FireMission };
   'intel:new': { report: IntelReport };
+  'enemy:destroyed': { id: string; type: string; name: string };
+  'enemy:shelling': { rounds: number };
   'radio:message': { msg: RadioMessage };
   'radio:delivered': { msg: RadioMessage };
   'power:changed': { on: boolean; backup: boolean };
