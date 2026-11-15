@@ -1,0 +1,60 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'game.granit'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'game.granit'
+        minSdk 24
+        targetSdk 35
+        versionCode 1
+        versionName '0.1.0'
+    }
+
+    // Ключ для самостоятельной установки (sideload). Все сборки подписываются одинаково,
+    // поэтому новую версию можно ставить поверх старой без потери сохранений.
+    // Для публикации в магазине создайте собственный ключ.
+    signingConfigs {
+        sideload {
+            storeFile file('../keystore/granit-sideload.jks')
+            storePassword 'granit1944'
+            keyAlias 'granit'
+            keyPassword 'granit1944'
+        }
+    }
+
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.sideload
+        }
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.sideload
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+    }
+}
+
+// Веб-сборка игры (../dist) копируется в assets/www перед сборкой приложения.
+tasks.register('syncWeb', Sync) {
+    from '../../dist'
+    into 'src/main/assets/www'
+    doFirst {
+        if (!file('../../dist/index.html').exists()) {
+            throw new GradleException('Не найдена веб-сборка игры. Сначала выполните в корне проекта: npm run build')
+        }
+    }
+}
+preBuild.dependsOn syncWeb
