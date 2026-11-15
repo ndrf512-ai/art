@@ -222,6 +222,11 @@ export class GuardAI {
       npc.passes[g.id] = now;
       return 'pass';
     }
+    // прибывших со стороны часовой не пропускает без решения командира
+    if (npc.unit === 'external' && !npc.flags.admitted && sim.events.visitor(npc.id)) {
+      sim.events.visitorAtGate(npc, sentry);
+      return 'wait';
+    }
     const busy = this.state.gateBusy[g.id];
     if (busy && busy.npc !== npc.id) {
       if (sim.clock > busy.until + 6) this.state.gateBusy[g.id] = null;
