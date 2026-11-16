@@ -377,6 +377,10 @@ export class NPCSystem {
     if (n.carry) speed *= run ? 0.6 : 0.85;
     if (n.status === 'wounded') speed *= 0.55;
     if (n.fatigue > 85) speed *= 0.88;
+    // с места человек трогается за полсекунды, а не мгновенно
+    const prev = n.moving ? Number(n.flags.spd ?? 0) : 0;
+    speed = Math.min(speed, prev + (run ? 7 : 3.5) * dt);
+    n.flags.spd = speed;
     let left = speed * dt;
     n.run = run;
     while (left > 0 && n.pathI < path.length) {

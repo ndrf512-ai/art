@@ -219,6 +219,54 @@ const scenarios = {
     console.log(await h.info());
     return h;
   },
+  async gait() {
+    const h = await boot('autostart=f');
+    await h.clickText('Продолжить');
+    await h.ev(() => {
+      const g = window.__game;
+      const sim = g.sim;
+      sim.time.state.t = 11 * 60;
+      sim.weather.state.fog = 0.02;
+      sim.weather.state.rain = 0;
+      const n = sim.npcs.list.find((x) => x.role === 'guard' && x.shift === 'day');
+      n.x = 51; n.z = 69.5; n.yaw = Math.PI / 2;
+      sim.command.issue('goto', n, 'проверка походки', { x: 64, z: 69.5, run: !!window.__run });
+      window.__walker = n.id;
+      const p = sim.player;
+      p.x = 57.5; p.z = 65.2; p.yaw = 0; p.pitch = -0.05; p.busy = true;
+    });
+    for (const run of [false, true]) {
+      await h.ev((r) => { const g = window.__game; const n = g.sim.npcs.byId(window.__walker); n.x = 51; n.z = 69.5; g.sim.command.dismiss(n); g.sim.command.issue('goto', n, 'проверка походки', { x: 64, z: 69.5, run: r }); }, run);
+      // ждём, пока человек выйдет к центру кадра
+      for (let i = 0; i < 400; i++) {
+        await h.ev(() => { window.__game.last = performance.now() - 33; window.__game.frame(); });
+        const x = await h.ev(() => window.__game.sim.npcs.byId(window.__walker).x);
+        if (x > (run ? 54.5 : 55.6)) break;
+      }
+      for (let k = 0; k < 8; k++) {
+        await h.ev(() => { for (let i = 0; i < (window.__run2 ? 2 : 4); i++) { window.__game.last = performance.now() - 33; window.__game.frame(); } });
+        await h.page.screenshot({ path: `scripts/out/gait_${run ? 'run' : 'walk'}_${k}.png`, clip: { x: 340, y: 150, width: 600, height: 520 }, timeout: 180000 });
+      }
+      console.log(run ? 'run' : 'walk', 'кадры сняты');
+    }
+    // камера командира: высота глаз и шаги за 3 секунды ходьбы
+    const trace = await h.ev(() => {
+      const g = window.__game;
+      const p = g.sim.player;
+      p.busy = false; p.x = 57.5; p.z = 64; p.yaw = 0;
+      const out = [];
+      let steps = 0;
+      g.player.onStep = () => steps++;
+      const pc = g.player;
+      pc.keys.add('KeyW');
+      for (let i = 0; i < 180; i++) { pc.update(1 / 60, []); out.push(g.sr.camera.position.y); }
+      pc.keys.delete('KeyW');
+      const sp = pc.speed;
+      return { minY: Math.min(...out.slice(60)).toFixed(3), maxY: Math.max(...out.slice(60)).toFixed(3), steps, speed: sp.toFixed(2), dist: (p.z - 64).toFixed(2) };
+    });
+    console.log('камера командира:', JSON.stringify(trace));
+    return h;
+  },
 };
 
 (async () => {

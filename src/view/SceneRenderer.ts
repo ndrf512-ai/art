@@ -293,10 +293,8 @@ export class SceneRenderer {
       const s = this.shake;
       this.camera.position.x += (Math.random() - 0.5) * s * 0.12;
       this.camera.position.y += (Math.random() - 0.5) * s * 0.12;
-      this.camera.rotation.z = (Math.random() - 0.5) * s * 0.02;
+      this.camera.rotation.z += (Math.random() - 0.5) * s * 0.02;
       this.shake = Math.max(0, this.shake - dt * 2.2) * Math.exp(-dt * 3);
-    } else {
-      this.camera.rotation.z = 0;
     }
     this.renderer.render(this.scene, this.camera);
   }

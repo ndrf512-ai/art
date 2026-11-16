@@ -189,6 +189,8 @@ export class CharacterView {
   private pSpeed = 0;
   time = 0;
   drawn = 0;
+  /** Фаза и скорость шага командира — тело шагает в такт камере. */
+  gait: (() => { phase: number; speed: number }) | null = null;
 
   constructor(
     private sim: Sim,
@@ -328,8 +330,10 @@ export class CharacterView {
     // торс чуть впереди глаз по вертикали: при взгляде вниз видно грудь и полы плаща
     fig.group.position.set(p.x - fx * 0.075, 0, p.z - fz * 0.075);
     fig.group.rotation.y = p.yaw;
-    const move: MoveAnim = this.pSpeed > 0.4 ? (this.pSpeed > 4.4 ? 'run' : 'walk') : null;
-    fig.update(dt, this.time, 'idle', move, this.pSpeed * 0.5, null, false);
+    const g = this.gait?.();
+    const gs = g ? g.speed : this.pSpeed;
+    const move: MoveAnim = gs > 0.25 ? (gs > 3.0 ? 'run' : 'walk') : null;
+    fig.update(dt, this.time, 'idle', move, gs, null, false, g?.phase);
     this.applyLight(fig.material, p.x, p.z);
 
     // зеркала рисуют отражение только когда командир рядом и видит их

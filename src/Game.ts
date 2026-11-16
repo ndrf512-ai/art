@@ -98,6 +98,7 @@ export class Game implements GameApi {
     this.machines = new MachineView(this.sim, this.sr.scene, this.M);
     this.fx = new Effects(this.sr.scene, Math.round(140 * this.quality.particles));
     this.player = new PlayerController(this.sim, this.sr.camera, canvas);
+    this.chars.gait = () => ({ phase: this.player.stepPhase, speed: this.player.speed });
     this.ui = new UIManager(uiRoot, this);
     this.player.onInteract = (t) => this.ui.interact(t);
     this.player.onStep = (indoor, run) => this.audio.step(indoor, run);

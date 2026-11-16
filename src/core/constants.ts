@@ -16,8 +16,12 @@ export const START_DAY_OF_MONTH = 16;
 export const WALK_SPEED = 1.45;
 export const RUN_SPEED = 3.7;
 
-export const PLAYER_WALK = 3.2;
-export const PLAYER_RUN = 6.2;
+/** Обычный шаг человека — около 1,6 м/с, бег — 4,5 м/с. */
+export const PLAYER_WALK = 1.65;
+export const PLAYER_RUN = 4.5;
+/** Длина шага при ходьбе и при беге, м. */
+export const STEP_WALK = 0.74;
+export const STEP_RUN = 1.25;
 export const PLAYER_RADIUS = 0.32;
 export const EYE_HEIGHT = 1.7;
 

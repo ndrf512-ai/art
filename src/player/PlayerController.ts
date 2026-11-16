@@ -4,7 +4,7 @@
  * экран (виртуальный джойстик и обзор пальцем подключаются через setMove/addLook).
  */
 import * as THREE from 'three';
-import { EYE_HEIGHT, PLAYER_RADIUS, PLAYER_RUN, PLAYER_WALK } from '../core/constants';
+import { EYE_HEIGHT, PLAYER_RADIUS, PLAYER_RUN, PLAYER_WALK, STEP_RUN, STEP_WALK } from '../core/constants';
 import { clamp, damp, dist } from '../core/math';
 import type { Interactable } from '../core/types';
 import { fullName } from '../sim/DocumentSystem';
@@ -22,10 +22,13 @@ export class PlayerController {
   private keys = new Set<string>();
   private move = { x: 0, y: 0 };
   private touchRun = false;
-  private bob = 0;
-  private speed = 0;
+  private vel = { x: 0, z: 0 };
+  private bobAmp = 0;
+  private impact = 0;
+  /** Фаза шага (π на шаг): по ней же шагает тело командира. */
+  stepPhase = Math.PI / 2;
+  speed = 0;
   private dragging = false;
-  private stepAcc = 0;
   locked = false;
   sensitivity = 1;
   invertY = false;
@@ -128,8 +131,21 @@ export class PlayerController {
     const sp = (run ? PLAYER_RUN : PLAYER_WALK) * (p.health < 40 ? 0.7 : 1);
     const fx = Math.sin(p.yaw);
     const fz = Math.cos(p.yaw);
-    const vx = (fx * my - fz * mx) * sp;
-    const vz = (fz * my + fx * mx) * sp;
+    // желаемая скорость; настоящая набирается и гасится с инерцией тела
+    const tx = (fx * my - fz * mx) * sp;
+    const tz = (fz * my + fx * mx) * sp;
+    const want = Math.hypot(tx, tz);
+    const accel = want > Math.hypot(this.vel.x, this.vel.z) ? (run ? 5.5 : 4) : 7;
+    const dvx = tx - this.vel.x;
+    const dvz = tz - this.vel.z;
+    const dl = Math.hypot(dvx, dvz);
+    const stepV = Math.min(dl, accel * dt);
+    if (dl > 1e-6) {
+      this.vel.x += (dvx / dl) * stepV;
+      this.vel.z += (dvz / dl) * stepV;
+    }
+    const vx = this.vel.x;
+    const vz = this.vel.z;
     let nx = p.x + vx * dt;
     let nz = p.z + vz * dt;
     if (!this.free(nx, p.z)) nx = p.x;
@@ -152,23 +168,48 @@ export class PlayerController {
       }
     }
     const moved = Math.hypot(nx - p.x, nz - p.z);
-    this.speed = damp(this.speed, moved / Math.max(dt, 1e-4), 12, dt);
+    // упёрлись в стену — скорость гаснет
+    if (moved < Math.hypot(vx, vz) * dt * 0.5) {
+      this.vel.x *= 0.5;
+      this.vel.z *= 0.5;
+    }
+    this.speed = damp(this.speed, moved / Math.max(dt, 1e-4), 14, dt);
     p.x = nx;
     p.z = nz;
     p.zone = sim.grid.zoneAt(p.x, p.z);
     p.indoor = sim.grid.indoorAt(p.x, p.z);
 
-    if (this.speed > 0.5) {
-      this.bob += dt * (run ? 11 : 8);
-      this.stepAcc += moved;
-      if (this.stepAcc > (run ? 1.5 : 0.95)) {
-        this.stepAcc = 0;
-        this.onStep(p.indoor, run);
-      }
+    // ---- шаги: фаза растёт на π за каждый шаг; касание ногой — при |sin| = 1
+    const running = this.speed > 3.0;
+    const stepLen = running ? STEP_RUN : STEP_WALK;
+    const prev = this.stepPhase;
+    if (this.speed > 0.15) this.stepPhase += (moved / stepLen) * Math.PI;
+    else {
+      // остановились: тело доводит шаг до опоры
+      const target = Math.round((this.stepPhase - Math.PI / 2) / Math.PI) * Math.PI + Math.PI / 2;
+      this.stepPhase += (target - this.stepPhase) * Math.min(1, dt * 6);
     }
-    const eye = (p.gender === 'f' ? EYE_HEIGHT - 0.06 : EYE_HEIGHT) + Math.sin(this.bob) * 0.03 * Math.min(1, this.speed / 3);
-    this.camera.position.set(p.x + fx * 0.04, eye, p.z + fz * 0.04);
-    this.camera.rotation.set(p.pitch, p.yaw + Math.PI, 0, 'YXZ');
+    const crossed = Math.floor((this.stepPhase - Math.PI / 2) / Math.PI) !== Math.floor((prev - Math.PI / 2) / Math.PI);
+    if (crossed && this.speed > 0.3) {
+      this.onStep(p.indoor, running);
+      this.impact = running ? 0.022 : 0.012;
+    }
+    this.impact = Math.max(0, this.impact - dt * 0.12);
+    const amp = damp(this.bobAmp, this.speed > 0.2 ? (running ? 0.05 : 0.026) * Math.min(1, this.speed / (running ? 3.5 : 1.3)) : 0, 6, dt);
+    this.bobAmp = amp;
+    const s = Math.sin(this.stepPhase);
+    const c = Math.cos(this.stepPhase);
+    // голова ниже всего в момент постановки ноги, выше всего — над опорной ногой
+    const vert = -amp * s * s - this.impact * 0.6;
+    // перенос веса с ноги на ногу — раз за два шага
+    const side = amp * 0.55 * c;
+    const roll = c * amp * 0.12;
+    const nod = -s * s * amp * 0.08;
+    const rx = -fz;
+    const rz = fx;
+    const eye = (p.gender === 'f' ? EYE_HEIGHT - 0.06 : EYE_HEIGHT) + vert + amp * 0.5;
+    this.camera.position.set(p.x + fx * 0.04 + rx * side, eye, p.z + fz * 0.04 + rz * side);
+    this.camera.rotation.set(p.pitch + nod, p.yaw + Math.PI, roll, 'YXZ');
     this.findTarget();
   }
 

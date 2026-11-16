@@ -29,12 +29,16 @@ export interface Pose {
   kL: number;
   lRx: number;
   kR: number;
+  /** Таз: поворот, наклон и смещение над опорной ногой. */
+  hY: number;
+  hR: number;
+  hX: number;
 }
 
-const KEYS: (keyof Pose)[] = ['hipY', 'pitch', 'spX', 'spY', 'hdX', 'hdY', 'aLx', 'aLy', 'aLz', 'eL', 'aRx', 'aRy', 'aRz', 'eR', 'lLx', 'kL', 'lRx', 'kR'];
+const KEYS: (keyof Pose)[] = ['hipY', 'pitch', 'spX', 'spY', 'hdX', 'hdY', 'aLx', 'aLy', 'aLz', 'eL', 'aRx', 'aRy', 'aRz', 'eR', 'lLx', 'kL', 'lRx', 'kR', 'hY', 'hR', 'hX'];
 
 export function zeroPose(): Pose {
-  return { hipY: 0, pitch: 0, spX: 0, spY: 0, hdX: 0, hdY: 0, aLx: 0, aLy: 0, aLz: 0, eL: 0, aRx: 0, aRy: 0, aRz: 0, eR: 0, lLx: 0, kL: 0, lRx: 0, kR: 0 };
+  return { hipY: 0, pitch: 0, spX: 0, spY: 0, hdX: 0, hdY: 0, aLx: 0, aLy: 0, aLz: 0, eL: 0, aRx: 0, aRy: 0, aRz: 0, eR: 0, lLx: 0, kL: 0, lRx: 0, kR: 0, hY: 0, hR: 0, hX: 0 };
 }
 
 export type MoveAnim = 'walk' | 'run' | 'carry' | null;
@@ -48,27 +52,44 @@ export function computePose(p: Pose, anim: AnimId, move: MoveAnim, t: number, ph
   p.eL = p.eR = 0.12;
   p.aLz = p.aRz = 0.04;
   if (move) {
+    // Цикл шага: фаза растёт на π за шаг. Левая нога впереди (касание пяткой) при ph = π/2,
+    // позади (отрыв носка) при ph = −π/2; перенос ноги — пока cos(ph) > 0.
     const run = move === 'run';
-    const A = run ? 0.85 : move === 'carry' ? 0.42 : 0.5;
-    const K = run ? 1.45 : 0.85;
+    const carry = move === 'carry';
+    const A = run ? 0.72 : carry ? 0.36 : 0.44;
     const sw = s(ph);
-    p.lLx = A * sw;
-    p.lRx = -A * sw;
-    p.kL = 0.08 + K * Math.max(0, Math.cos(ph));
-    p.kR = 0.08 + K * Math.max(0, -Math.cos(ph));
-    p.hipY = -0.025 * Math.abs(sw);
-    p.spY = 0.07 * sw;
-    if (move === 'carry') {
+    const cw = Math.cos(ph);
+    p.lLx = A * sw + (run ? 0.12 : 0.04);
+    p.lRx = -A * sw + (run ? 0.12 : 0.04);
+    // колено: сильный сгиб в начале переноса ноги, небольшой — при принятии веса
+    const swingK = run ? 1.75 : 0.88;
+    const loadK = run ? 0.45 : 0.24;
+    const knee = (q: number) => swingK * Math.pow(Math.max(0, Math.cos(q + (run ? Math.PI / 4 : Math.PI / 6))), 1.4) + loadK * Math.max(0, Math.sin(2 * (q - Math.PI / 2))) * (Math.cos(q) < 0 ? 1 : 0) + 0.05;
+    p.kL = knee(ph);
+    p.kR = knee(ph + Math.PI);
+    // корпус ниже всего в момент касания, выше — над опорной ногой
+    p.hipY = -(run ? 0.045 : 0.03) * sw * sw + (run ? -0.03 : 0);
+    // таз поворачивается за ногой, плечи — навстречу; таз проседает со стороны переносимой ноги
+    p.hY = -(run ? 0.12 : 0.09) * sw;
+    p.hR = -(run ? 0.035 : 0.05) * cw;
+    p.hX = -(run ? 0.012 : 0.022) * cw;
+    p.spY = (run ? 0.22 : 0.16) * sw;
+    p.hdY = -(run ? 0.1 : 0.07) * sw;
+    p.hdX = run ? -0.12 : -0.02;
+    if (carry) {
       p.aLx = p.aRx = 0.8;
       p.eL = p.eR = 1.05;
       p.aLz = p.aRz = -0.1;
-      p.spX = -0.04;
+      p.spX = -0.06;
+      p.spY *= 0.3;
     } else {
-      const arm = run ? 0.85 : 0.42;
+      const arm = run ? 0.75 : 0.34;
       p.aLx = -arm * sw;
       p.aRx = arm * sw;
-      p.eL = p.eR = run ? 1.3 : 0.28;
-      p.spX = run ? 0.2 : 0.04;
+      p.eL = (run ? 1.45 : 0.2) + (run ? 0.25 : 0.28) * Math.max(0, -sw);
+      p.eR = (run ? 1.45 : 0.2) + (run ? 0.25 : 0.28) * Math.max(0, sw);
+      p.aLz = p.aRz = run ? 0.1 : 0.06;
+      p.spX = run ? 0.26 : 0.05 + 0.015 * sw * sw;
     }
     return;
   }
@@ -370,6 +391,7 @@ export class Figure {
   private papers: THREE.Mesh;
   private tool: THREE.Mesh;
   phase = 0;
+  private moveW = 0;
   seed = Math.random() * 10;
   private qa = new THREE.Quaternion();
   private qb = new THREE.Quaternion();
@@ -481,15 +503,21 @@ export class Figure {
   }
 
   /** Обновление позы. moveSpeed — скорость перемещения, м/с (для фазы шага). */
-  update(dt: number, t: number, anim: AnimId, move: MoveAnim, moveSpeed: number, carry: CarryKind, weaponOut: boolean): void {
-    if (move) this.phase += dt * (move === 'run' ? 2.6 : 3.3) * Math.max(0.6, moveSpeed) * (move === 'run' ? 1 : 1.25);
+  update(dt: number, t: number, anim: AnimId, move: MoveAnim, moveSpeed: number, carry: CarryKind, weaponOut: boolean, extPhase?: number): void {
+    // фаза шага от пройденного пути: ноги не скользят по земле
+    if (extPhase !== undefined) this.phase = extPhase;
+    else if (move) this.phase += (dt * Math.max(0.4, moveSpeed) * Math.PI) / (move === 'run' ? 1.2 : move === 'carry' ? 0.6 : 0.72);
     computePose(this.target, anim, move, t, this.phase, this.seed);
-    const k = Math.min(1, dt * 9);
+    // походка — без сглаживания (иначе шаг «плывёт»), смена позы — плавно
+    this.moveW += ((move ? 1 : 0) - this.moveW) * Math.min(1, dt * 7);
+    const k = Math.min(1, dt * (move ? 9 + 26 * this.moveW : 9));
     const p = this.pose;
     for (const key of KEYS) p[key] += (this.target[key] - p[key]) * k;
     const b = this.bones;
     b[B.root].rotation.x = p.pitch;
     b[B.hips].position.y = HIP_Y + p.hipY;
+    b[B.hips].position.x = p.hX;
+    b[B.hips].rotation.set(0, p.hY, p.hR);
     b[B.spine].rotation.set(p.spX, p.spY, 0);
     b[B.head].rotation.set(p.hdX, p.hdY, 0);
     this.setArm(b[B.armL], p.aLx, p.aLy, p.aLz, 1);
