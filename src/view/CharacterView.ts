@@ -194,7 +194,7 @@ export class CharacterView {
     const [li, lo] = this.world.sampleLight(x, z);
     const l = Math.min(1.6, li * lightUniforms.uIndoor.value + lo * lightUniforms.uOutdoor.value);
     const c = lightUniforms.uLampColor.value;
-    mat.emissive.setRGB(c.r * l * 0.17, c.g * l * 0.17, c.b * l * 0.17);
+    mat.emissive.setRGB(c.r * l * 0.9, c.g * l * 0.9, c.b * l * 0.9);
     mat.aoMapIntensity = this.sim.grid.indoorAt(x, z) ? 0.9 : 0;
   }
 

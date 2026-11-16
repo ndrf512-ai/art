@@ -572,6 +572,11 @@ export class Figure {
     mk(0, -0.44, 0, legR);
 
     this.material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0, aoMap: black1, aoMapIntensity: 0 });
+    // свет ламп действует как освещение, а не как свечение: тёмная ткань остаётся тёмной
+    this.material.onBeforeCompile = (shader) => {
+      shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance *= diffuseColor.rgb;');
+    };
+    this.material.customProgramCacheKey = () => 'figure-lit';
     const skeleton = new THREE.Skeleton(this.bones);
     this.mesh = new THREE.SkinnedMesh(P.geometry(), this.material);
     this.mesh.add(root);
@@ -652,7 +657,9 @@ export class Figure {
     const aiming = anim === 'aim' || anim === 'kneel_aim';
     if (this.rifleBack && this.rifleHand) {
       this.rifleHand.visible = weaponOut || aiming;
-      this.rifleBack.visible = !this.rifleHand.visible;
+      // сидя, лёжа и во сне винтовка стоит в пирамиде, а не торчит из-за спины
+      const seated = !move && (anim.startsWith('sit') || anim === 'sleep' || anim === 'lie' || anim === 'cover' || anim === 'repair_low');
+      this.rifleBack.visible = !this.rifleHand.visible && !seated;
     }
     this.crate.visible = carry === 'crate' || carry === 'box' || carry === 'canister';
     this.shell.visible = carry === 'shell';

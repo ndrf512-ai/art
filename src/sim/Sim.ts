@@ -272,6 +272,11 @@ export class Sim {
         n.fatigue = 55;
       }
     }
+    // дневная смена уже поднята и идёт на построение
+    for (const n of this.npcs.list) {
+      if (n.shift === 'night' || n.unit === 'external') continue;
+      n.fatigue = Math.min(n.fatigue, 20);
+    }
     const posts = ['post_kpp_1', 'post_secret_1', 'post_kpp_2', 'post_tower_1', 'post_hangar_1'];
     const guards = this.npcs.list.filter((n) => n.role === 'guard' && n.shift === 'night');
     posts.forEach((p, i) => {

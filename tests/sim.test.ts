@@ -15,9 +15,9 @@ describe('симуляция мира', () => {
     sim.bus.on('radio:message', ({ msg }) => notes.push(`${sim.time.stamp()} [радио] ${msg.from}: ${msg.subject}${msg.kind === 'detain' ? ' — ' + msg.body : ''}`));
     expect(sim.npcs.list.length).toBe(50);
 
-    // 05:50 — построение
+    // 05:55 — построение: люди должны уже стоять в строю, а не идти по тоннелю
     run(sim, 15);
-    const inFormation = sim.npcs.list.filter((n) => n.goal === 'formation').length;
+    const inFormation = sim.npcs.list.filter((n) => n.goal === 'formation' && n.zone === 'parade' && !n.moving).length;
     console.log('05:55 в строю:', inFormation);
     expect(inFormation).toBeGreaterThan(20);
 

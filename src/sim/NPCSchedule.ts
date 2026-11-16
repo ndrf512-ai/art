@@ -35,15 +35,14 @@ export class NPCSchedule {
       return 'sleep';
     }
     if (n.shift === 'flex') {
-      if (m >= 345 && m < 370) return 'formation';
+      if (m >= 328 && m < 370) return 'formation';
       if ((m >= 370 && m < 405) || (m >= 750 && m < 790) || (m >= 1110 && m < 1150)) return 'meal';
       if (m >= 405 && m < 1260) return 'duty';
       if (m >= 1260 && m < 1320) return 'free';
-      if (m >= 330 && m < 345) return 'free';
       return 'sleep';
     }
     const guard = n.unit === 'guard';
-    if (m >= 345 && m < (guard ? 358 : 370)) return 'formation';
+    if (m >= 325 && m < (guard ? 358 : 370)) return 'formation';
     if (guard && m >= 358 && m < 1085) {
       if ((m >= 380 && m < 400 && false) || (m >= 720 && m < 745)) return 'meal';
       return 'duty';
@@ -52,7 +51,6 @@ export class NPCSchedule {
     if (m >= 405 && m < 1085) return 'duty';
     if (m >= 1085 && m < 1095) return 'duty';
     if (m >= 1140 && m < 1290) return 'free';
-    if (m >= 330 && m < 345) return 'free';
     return 'sleep';
   }
 
@@ -124,7 +122,7 @@ export class NPCSchedule {
         score: 62,
         task: 'Утреннее построение',
         plan: () => {
-          const steps: Step[] = [{ k: 'go', x: spot.x, z: spot.z, tol: 0.35 }];
+          const steps: Step[] = [{ k: 'go', x: spot.x, z: spot.z, tol: 0.35, run: m >= 338 }];
           if (adj && m < 360) {
             steps.push({ k: 'do', anim: 'attention', dur: Math.max(1, 360 - m), yaw: spot.yaw });
             steps.push({ k: 'call', fn: 'formation.report' });
