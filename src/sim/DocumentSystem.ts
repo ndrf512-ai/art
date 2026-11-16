@@ -66,12 +66,12 @@ export function fullName(npc: { first: string; last: string; rank: number; unit:
 
 /** Документы личного состава, реестр (картотека архива) и проверка подлинности. */
 export class DocumentSystem {
-  state = { registry: {} as Record<string, PersonalDocument>, flaws: {} as Record<string, string[]>, seq: 1000, checked: {} as Record<string, number> };
+  state = { registry: {} as Record<string, PersonalDocument>, flaws: {} as Record<string, string[]>, seq: 1000, checked: {} as Record<string, number>, seen: {} as Record<string, PersonalDocument> };
 
   constructor(private sim: Sim) {}
 
   reset(): void {
-    this.state = { registry: {}, flaws: {}, seq: 1000 + this.sim.rng.int(0, 400), checked: {} };
+    this.state = { registry: {}, flaws: {}, seq: 1000 + this.sim.rng.int(0, 400), checked: {}, seen: {} };
   }
 
   /** Выписать документы и внести человека в картотеку. */
@@ -129,6 +129,15 @@ export class DocumentSystem {
     else reg.holder = reg.holder.replace(/[её]/, 'e').replace('й', 'и') + (reg.holder === npc.doc.holder ? 'н' : '');
   }
 
+  /** Командир лично посмотрел документ: копия остаётся в его записях для сверки с картотекой. */
+  markSeen(npc: NpcState): void {
+    this.state.seen[npc.id] = JSON.parse(JSON.stringify(npc.doc));
+  }
+
+  seenDoc(id: string): PersonalDocument | null {
+    return this.state.seen[id] ?? null;
+  }
+
   registry(id: string): PersonalDocument | null {
     return this.state.registry[id] ?? null;
   }
@@ -178,5 +187,7 @@ export class DocumentSystem {
 
   load(d: any): void {
     this.state = d;
+    this.state.seen ??= {};
+    this.state.checked ??= {};
   }
 }

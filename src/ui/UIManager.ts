@@ -476,7 +476,9 @@ export class UIManager {
       if (t) {
         clear(this.promptBtn);
         const verb = t.kind === 'npc' ? 'Говорить' : 'Осмотреть';
-        this.promptBtn.append(this.game.touch ? null : h('kbd', null, '[E]'), `${verb}: ${t.label}`, t.hint ? h('small', null, t.hint) : null);
+        if (!this.game.touch) this.promptBtn.append(h('kbd', null, '[E]'));
+        this.promptBtn.append(`${verb}: ${t.label}`);
+        if (t.hint) this.promptBtn.append(h('small', null, t.hint));
       }
     }
     if (this.panel?.res.refresh) {
@@ -533,7 +535,7 @@ export class UIManager {
     }
     for (const o of sim.command.active().slice(-3)) if (o.type !== 'fire') lines.push(sim.command.summary(o));
     const req = sim.supply.activeRequest();
-    if (req) lines.push(req.status === 'unloading' ? 'Снабжение: идёт разгрузка' : `Снабжение: колонна в пути, прибытие около ${sim.time.constructor.name ? '' : ''}${this.clock(req.eta)}`);
+    if (req) lines.push(req.status === 'unloading' ? 'Снабжение: идёт разгрузка' : `Снабжение: колонна в пути, прибытие около ${this.clock(req.eta)}`);
     const unread = sim.radio.unread();
     this.journalBtn.textContent = 'Журнал';
     if (unread) this.journalBtn.append(h('span', { class: 'badge' }, String(unread)));
