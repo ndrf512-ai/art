@@ -37,6 +37,27 @@ interface PoolSlot {
   k: number;
 }
 
+/**
+ * Создание WebGL-рендерера с запасными вариантами: некоторые мобильные WebView
+ * не дают контекст с запрошенными параметрами, но дают с более скромными.
+ */
+function createRenderer(canvas: HTMLCanvasElement, q: QualitySettings): THREE.WebGLRenderer {
+  const attempts: THREE.WebGLRendererParameters[] = [
+    { antialias: q.antialias, powerPreference: q.level === 'high' ? 'high-performance' : 'default', stencil: false, failIfMajorPerformanceCaveat: false },
+    { antialias: false, powerPreference: 'default', stencil: false, failIfMajorPerformanceCaveat: false },
+    { antialias: false, powerPreference: 'low-power', stencil: false, depth: true, alpha: false, failIfMajorPerformanceCaveat: false },
+  ];
+  let last: unknown = null;
+  for (const a of attempts) {
+    try {
+      return new THREE.WebGLRenderer({ canvas, ...a });
+    } catch (e) {
+      last = e;
+    }
+  }
+  throw last instanceof Error ? last : new Error('WebGL недоступен');
+}
+
 export class SceneRenderer {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene = new THREE.Scene();
@@ -66,7 +87,7 @@ export class SceneRenderer {
     canvas: HTMLCanvasElement,
     readonly quality: QualitySettings,
   ) {
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: quality.antialias, powerPreference: 'high-performance', stencil: false });
+    this.renderer = createRenderer(canvas, quality);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.0;
     this.renderer.shadowMap.enabled = quality.shadows;
@@ -97,7 +118,8 @@ export class SceneRenderer {
     this.scene.add(this.sun, this.sun.target);
 
     this.flashlight = new THREE.SpotLight(0xfff2d8, 0, 34, 0.46, 0.55, 1.3);
-    this.scene.add(this.flashlight, this.flashlight.target);
+    // на минимальном качестве прожектор фонаря не участвует в шейдерах (каждый источник света дорог)
+    if (quality.level !== 'minimal') this.scene.add(this.flashlight, this.flashlight.target);
 
     // небесный купол
     this.skyUniforms = {

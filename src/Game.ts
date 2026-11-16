@@ -17,6 +17,7 @@ import { MachineView } from './view/MachineView';
 import { Materials } from './view/Materials';
 import { isTouchDevice, loadUserSettings, lowerQuality, QUALITY_NAMES, resolveQuality, saveUserSettings, type QualityLevel, type QualitySettings, type UserSettings } from './view/Quality';
 import { setCheapFigures } from './view/Humanoid';
+import { recordCrash, restartApp } from './platform';
 import { setTextureScale } from './view/Textures';
 import { SceneRenderer, type EnvState } from './view/SceneRenderer';
 import { buildPhone } from './view/Props';
@@ -124,21 +125,63 @@ export class Game implements GameApi {
     const auto = params.get('autostart');
     if (auto) this.newGame(auto === 'f' ? 'f' : 'm');
     else if (this.takeResumeFlag()) this.continueGame();
-    // шейдеры компилируются заранее и, где возможно, параллельно — без долгого «первого кадра»
+    // Шейдеры и текстуры готовятся понемногу, по нескольку за кадр. Если скомпилировать всё
+    // разом, слабый видеочип надолго «зависает», и система сбрасывает графику.
     this.chars.update(0);
     this.ui.fade.classList.add('on');
     this.ui.fade.textContent = 'Подготовка графики…';
-    const done = (): void => {
-      if (this.ready) return;
-      this.ready = true;
-      if (!this.sleeping) {
-        this.ui.fade.classList.remove('on');
-        this.ui.fade.textContent = '';
-      }
-    };
-    this.sr.renderer.compileAsync(this.sr.scene, this.sr.camera).then(done, done);
-    setTimeout(done, 30000);
+    this.prepareQueue();
     requestAnimationFrame(this.frame);
+  }
+
+  private prepQueue: (THREE.Object3D | THREE.Texture)[] = [];
+  private prepTotal = 1;
+
+  private prepareQueue(): void {
+    const seenMat = new Set<THREE.Material>();
+    const seenTex = new Set<THREE.Texture>();
+    const objs: THREE.Object3D[] = [];
+    const texs: THREE.Texture[] = [];
+    this.sr.scene.traverse((o) => {
+      const mats = (o as THREE.Mesh).material;
+      if (!mats) return;
+      const list = Array.isArray(mats) ? mats : [mats];
+      let fresh = false;
+      for (const m of list) {
+        // одинаковый материал на разных типах объектов (сетка, скелетная сетка, экземпляры) — разные программы
+        const key = m;
+        if (!seenMat.has(key) || (o as THREE.SkinnedMesh).isSkinnedMesh || (o as THREE.InstancedMesh).isInstancedMesh) fresh = true;
+        seenMat.add(key);
+        for (const v of Object.values(m)) if (v instanceof THREE.Texture && !seenTex.has(v)) {
+          seenTex.add(v);
+          texs.push(v);
+        }
+      }
+      if (fresh) objs.push(o);
+    });
+    this.prepQueue = [...texs, ...objs];
+    this.prepTotal = Math.max(1, this.prepQueue.length);
+  }
+
+  /** Один шаг подготовки графики. Возвращает true, когда всё готово. */
+  private prepareStep(): boolean {
+    const r = this.sr.renderer;
+    const budget = this.quality.level === 'high' ? 8 : this.quality.level === 'medium' ? 4 : 2;
+    const t0 = performance.now();
+    let n = 0;
+    while (this.prepQueue.length && n < budget && performance.now() - t0 < 40) {
+      const item = this.prepQueue.shift()!;
+      try {
+        if (item instanceof THREE.Texture) r.initTexture(item);
+        else r.compile(item, this.sr.camera, this.sr.scene);
+      } catch (e) {
+        console.warn('Подготовка графики:', e);
+      }
+      n++;
+    }
+    const pct = Math.round(100 * (1 - this.prepQueue.length / this.prepTotal));
+    this.ui.fade.textContent = `Подготовка графики… ${pct}%`;
+    return this.prepQueue.length === 0;
   }
 
   private takeResumeFlag(): boolean {
@@ -154,24 +197,27 @@ export class Game implements GameApi {
   private onContextLost(): void {
     if (this.lost) return;
     this.lost = true;
+    const crashes = recordCrash();
     const playing = this.state === 'playing' || this.state === 'paused';
     if (playing) this.save.save('auto');
-    if (this.quality.level === 'minimal') {
-      this.ui.fade.classList.add('on');
-      this.ui.fade.textContent = 'Видеочип временно недоступен. Игра сохранена — ждём восстановления графики…';
-      return;
-    }
-    const next = lowerQuality(this.quality.level) ?? 'minimal';
-    this.settings.quality = next;
-    saveUserSettings(this.settings);
     try {
       if (playing) localStorage.setItem('granit.resume', '1');
     } catch {
       /* нет хранилища */
     }
+    // повторный сбой — сразу минимальное качество
+    const next: QualityLevel = crashes >= 2 ? 'minimal' : (lowerQuality(this.quality.level) ?? 'minimal');
+    this.settings.quality = next;
+    saveUserSettings(this.settings);
     this.ui.fade.classList.add('on');
-    this.ui.fade.textContent = `Видеочип не справился с нагрузкой. Перезапуск с качеством «${QUALITY_NAMES[next]}»…`;
-    setTimeout(() => location.reload(), 1800);
+    if (this.quality.level === 'minimal' && crashes >= 3) {
+      // по кругу не перезапускаемся: решение за игроком
+      this.ui.showCrashHelp();
+      return;
+    }
+    this.ui.fade.textContent = `Видеочип не справился с нагрузкой. Игра сохранена, перезапуск с качеством «${QUALITY_NAMES[next]}»…`;
+    // Android WebView после сбоя блокирует графику до перезапуска приложения целиком
+    setTimeout(() => restartApp(), 1500);
   }
 
   /** Применить новое качество графики: сохранение и перезапуск страницы. */
@@ -352,6 +398,13 @@ export class Game implements GameApi {
     const sim = this.sim;
     if (this.lost) return;
     if (!this.ready) {
+      if (this.prepareStep()) {
+        this.ready = true;
+        if (!this.sleeping) {
+          this.ui.fade.classList.remove('on');
+          this.ui.fade.textContent = '';
+        }
+      }
       requestAnimationFrame(this.frame);
       return;
     }

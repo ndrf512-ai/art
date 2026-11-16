@@ -13,6 +13,7 @@ import { fullName } from '../sim/DocumentSystem';
 import type { SaveSystem } from '../sim/SaveSystem';
 import type { Gender, Sim } from '../sim/Sim';
 import type { UserSettings } from '../view/Quality';
+import { isAndroidApp, restartApp } from '../platform';
 import { clear, h } from './dom';
 import { fireOrMapPanel } from './MapPanel';
 import { showChapter, showEnding, showMainMenu, showPause } from './Menus';
@@ -280,6 +281,22 @@ export class UIManager {
 
   get panelOpen(): boolean {
     return !!this.panel;
+  }
+
+  // ------------------------------------------------------------------ сбой видеочипа
+
+  /** Видеочип сбоит даже на минимальном качестве: объясняем и даём выбор. */
+  showCrashHelp(): void {
+    clear(this.overlay);
+    this.overlay.append(
+      h('div', { class: 'intro' },
+        h('h2', null, 'Видеочип не справляется'),
+        h('p', null, 'Графика телефона несколько раз сбросилась даже на минимальном качестве. Игра сохранена.'),
+        h('p', null, 'Попробуйте: закрыть другие приложения, перезапустить игру, обновить «Android System WebView» и «Chrome» в Google Play.'),
+        h('div', { class: 'row' }, h('button', { class: 'primary', onclick: () => restartApp() }, 'Перезапустить игру'), isAndroidApp() ? h('button', { onclick: () => this.game.exitApp() }, 'Выйти') : null),
+      ),
+    );
+    this.setOverlay(true);
   }
 
   // ------------------------------------------------------------------ меню

@@ -1,6 +1,7 @@
 package game.granit;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -238,6 +239,18 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void exitApp() {
             runOnUiThread(MainActivity.this::finish);
+        }
+
+        /** Полный перезапуск процесса: снимает блокировку WebGL после сбоя видеочипа. */
+        @JavascriptInterface
+        public void restartApp() {
+            runOnUiThread(() -> {
+                Intent i = new Intent(MainActivity.this, RestartActivity.class);
+                i.putExtra(RestartActivity.EXTRA_PID, android.os.Process.myPid());
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(i);
+                finishAffinity();
+            });
         }
     }
 }

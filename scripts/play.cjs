@@ -267,6 +267,39 @@ const scenarios = {
     console.log('камера командира:', JSON.stringify(trace));
     return h;
   },
+  async nogl() {
+    const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+    const page = await browser.newPage({ viewport: { width: W, height: H } });
+    await page.goto('http://localhost:4173/?nogl=1');
+    await page.waitForTimeout(1500);
+    await page.screenshot({ path: OUT + '70_nogl.png' });
+    const q = await page.evaluate(() => localStorage.getItem('granit.settings'));
+    console.log('настройки после ошибки:', q);
+    return { logs: [], browser };
+  },
+  async crashloop() {
+    const h = await boot('');
+    await h.clickText('Новая кампания');
+    await h.clickText('Принять командование');
+    await h.clickText('Продолжить');
+    await h.sim(10);
+    // три сбоя подряд: high → (сбой 1) medium → (сбой 2) minimal → (сбой 3) экран помощи
+    for (let k = 0; k < 3; k++) {
+      await h.ev(() => { window.__stop = false; window.__game.sr.renderer.getContext().getExtension('WEBGL_lose_context').loseContext(); });
+      if (k < 2) {
+        await h.page.waitForNavigation({ timeout: 30000 }).catch(() => {});
+        await h.page.waitForFunction(() => window.__game && window.__game.frames > 2 && window.__game.ready, null, { timeout: 240000 });
+        const r = await h.ev(() => JSON.stringify({ q: window.__game.quality.level, state: window.__game.state, t: window.__game.sim.time.clockString(), crashes: JSON.parse(localStorage.getItem('granit.crashes')).length }));
+        console.log('после сбоя', k + 1, r);
+      } else {
+        await h.page.waitForTimeout(2500);
+        await h.page.screenshot({ path: OUT + '71_crash_help.png', timeout: 120000 });
+        const nav = await h.ev(() => document.body.innerText.includes('Видеочип не справляется'));
+        console.log('экран помощи после третьего сбоя:', nav);
+      }
+    }
+    return h;
+  },
 };
 
 (async () => {

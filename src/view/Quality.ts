@@ -26,7 +26,7 @@ export interface QualitySettings {
 }
 
 const PRESETS: Record<QualityLevel, QualitySettings> = {
-  minimal: { level: 'minimal', pixelRatioCap: 0.8, shadows: false, shadowSize: 512, poolLights: 1, antialias: false, treeDensity: 0.25, npcShadowDist: 0, particles: 0.3, cheapMaterials: true, texScale: 0.5, mirrorRes: 192 },
+  minimal: { level: 'minimal', pixelRatioCap: 0.75, shadows: false, shadowSize: 512, poolLights: 0, antialias: false, treeDensity: 0.25, npcShadowDist: 0, particles: 0.3, cheapMaterials: true, texScale: 0.5, mirrorRes: 192 },
   low: { level: 'low', pixelRatioCap: 1, shadows: false, shadowSize: 512, poolLights: 2, antialias: false, treeDensity: 0.4, npcShadowDist: 0, particles: 0.5, cheapMaterials: true, texScale: 0.5, mirrorRes: 256 },
   medium: { level: 'medium', pixelRatioCap: 1.25, shadows: true, shadowSize: 1024, poolLights: 4, antialias: false, treeDensity: 0.7, npcShadowDist: 18, particles: 0.8, cheapMaterials: false, texScale: 1, mirrorRes: 384 },
   high: { level: 'high', pixelRatioCap: 2, shadows: true, shadowSize: 2048, poolLights: 7, antialias: true, treeDensity: 1, npcShadowDist: 45, particles: 1, cheapMaterials: false, texScale: 1, mirrorRes: 768 },
@@ -66,8 +66,14 @@ export function saveUserSettings(s: UserSettings): void {
   }
 }
 
+let autoMinimal = false;
+/** Подсказка для режима «Авто»: слабый видеочип, мало памяти или недавний сбой. */
+export function setAutoMinimal(v: boolean): void {
+  autoMinimal = v;
+}
+
 export function resolveQuality(s: UserSettings): QualitySettings {
-  let level: QualityLevel = s.quality === 'auto' ? (isTouchDevice() ? 'low' : 'high') : s.quality;
+  let level: QualityLevel = s.quality === 'auto' ? (isTouchDevice() ? (autoMinimal ? 'minimal' : 'low') : 'high') : s.quality;
   // для проверки: ?q=low в адресе
   const forced = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('q') : null;
   if (forced && forced in PRESETS) level = forced as QualityLevel;
