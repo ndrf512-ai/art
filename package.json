@@ -10,7 +10,9 @@
     "preview": "vite preview --host",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "smoke": "node scripts/smoke.mjs"
+    "play": "node scripts/play.cjs",
+    "android": "npm run build && cd android && ./gradlew assembleRelease",
+    "android:debug": "npm run build && cd android && ./gradlew assembleDebug"
   },
   "dependencies": {
     "three": "^0.187.0"

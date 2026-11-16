@@ -69,6 +69,73 @@ const scenarios = {
     console.log(await h.info());
     return h;
   },
+  async gameplay() {
+    const h = await boot('autostart=m');
+    await h.clickText('Продолжить');
+    // разговор с начальником штаба у шлагбаума
+    await h.sim(1);
+    const adj = await h.ev(() => { const g = window.__game; const n = g.sim.npcs.first('adjutant'); g.sim.player.x = n.x; g.sim.player.z = n.z + 1.6; g.sim.player.yaw = Math.PI; g.sim.player.pitch = -0.05; return n.id; });
+    await h.frames(3);
+    await h.ev((id) => window.__game.ui.showDialogue(window.__game.sim.dialogue.open(id)), adj);
+    await h.shot('20_dialogue');
+    await h.ev(() => window.__game.ui.chooseDialogue(0));
+    await h.shot('21_report');
+    await h.ev(() => window.__game.ui.closeDialogue());
+    // вторая глава: огневая задача
+    await h.ev(() => { const g = window.__game; g.sim.missions.state.flags.inspected_gun1 = true; for (const r of ['adjutant','battery_cmd','security_chief','ci_officer']) g.sim.missions.state.flags['met_' + r] = true; g.sim.missions.state.flags.report_guard = true; g.sim.player.x = 67.5; g.sim.player.z = 35; g.sim.player.zone = 'command'; });
+    await h.sim(2);
+    await h.frames(2);
+    const title = await h.ev(() => window.__game.sim.missions.state.title);
+    console.log('глава:', title);
+    if (await h.page.locator('button:has-text("Продолжить")').count()) await h.clickText('Продолжить');
+    await h.sim(16);
+    await h.ev(() => window.__game.ui.openPanel('fire'));
+    await h.frames(2);
+    // выбрать донесение о понтонном парке и открыть огонь
+    await h.ev(() => { const g = window.__game; const id = g.sim.missions.state.flags.pontoon_intel; window.__pont = id; });
+    await h.page.locator('.right .item:has-text("склад")').first().click();
+    await h.shot('22_fire_panel');
+    await h.clickText('Открыть огонь');
+    await h.frames(2);
+    await h.sim(6);
+    await h.ev(() => window.__game.ui.closePanel());
+    await h.place(86.5, 74, 200, 2);
+    await h.sim(1);
+    await h.shot('23_gun_crew');
+    await h.sim(10);
+    await h.ev(() => window.__game.ui.openPanel('fire'));
+    await h.page.locator('.right .item:has-text("понтон"), .right .item:has-text("склад")').first().click().catch(() => {});
+    await h.shot('24_fire_reports');
+    const rep = await h.ev(() => JSON.stringify(window.__game.sim.artillery.state.missions.map((m) => ({ t: m.targetName, f: m.fired, st: m.status, r: m.reports.slice(-3) }))));
+    console.log(rep);
+    await h.ev(() => window.__game.ui.closePanel());
+    await h.ev(() => window.__game.ui.openPanel('map'));
+    await h.shot('25_map');
+    await h.ev(() => window.__game.ui.closePanel());
+    await h.ev(() => window.__game.ui.openPanel('journal', { tab: 'messages' }));
+    await h.shot('26_journal');
+    // сохранение и загрузка
+    const before = await h.ev(() => { const g = window.__game; g.saveSlot('slot1'); return g.sim.time.clockString() + ' ' + g.sim.npcs.list.length; });
+    await h.sim(30);
+    const ok = await h.ev(() => window.__game.loadSlot('slot1'));
+    const after = await h.ev(() => { const g = window.__game; return g.sim.time.clockString() + ' ' + g.sim.npcs.list.length; });
+    console.log('save/load', before, '->', after, ok);
+    return h;
+  },
+  async phone() {
+    const h = await boot('autostart=f&touch=1');
+    await h.clickText('Продолжить');
+    await h.sim(2);
+    await h.place(57.5, 112, 180, -3);
+    await h.shot('30_phone_hud');
+    await h.ev(() => window.__game.ui.openPanel('fire'));
+    await h.shot('31_phone_fire');
+    await h.ev(() => window.__game.ui.closePanel());
+    const adj = await h.ev(() => window.__game.sim.npcs.first('adjutant').id);
+    await h.ev((id) => window.__game.ui.showDialogue(window.__game.sim.dialogue.open(id)), adj);
+    await h.shot('32_phone_dialogue');
+    return h;
+  },
 };
 
 (async () => {

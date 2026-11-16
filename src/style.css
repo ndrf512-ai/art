@@ -148,6 +148,8 @@ th { color: var(--dim); font-weight: normal; }
 .help td:first-child { color: var(--amber); white-space: nowrap; }
 .hidden { display: none !important; }
 @media (max-height: 430px) {
-  .hud-box { font-size: 0.8em; }
+  .hud-box { font-size: 0.8em; max-width: 52vw; }
+  .hud-box > div:nth-child(n+3) { display: none; }
+  .hud-orders > div:nth-child(n+3) { display: none; }
   .panel { inset: 1vh 1vw; }
 }

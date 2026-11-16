@@ -252,8 +252,9 @@ export class ReconSystem {
     const sim = this.sim;
     const m = sim.artillery.mission(p.missionId);
     if (!m) return;
-    const vis = sim.weather.visibility() * (1 - sim.time.darkness() * 0.5);
-    const op = OPS.find((o) => this.opOnline(o.id) && Math.hypot(o.x - p.ix, o.y - p.iy) < o.range * (0.4 + 0.6 * vis));
+    // вспышки разрывов видны и ночью; мешают только туман, дождь и снег
+    const vis = sim.weather.visibility();
+    const op = OPS.find((o) => this.opOnline(o.id) && Math.hypot(o.x - p.ix, o.y - p.iy) < o.range * (0.55 + 0.45 * vis));
     let text: string;
     if (!op) {
       const why = !sim.resources.state.wire && !sim.resources.state.radio ? 'нет связи с наблюдателями' : 'район вне видимости наблюдательных пунктов';
