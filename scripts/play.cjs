@@ -168,6 +168,57 @@ const scenarios = {
     await h.shot('51_after_restore');
     return h;
   },
+  async models() {
+    const h = await boot('autostart=' + (process.env.G || 'f') + (process.env.Q ? '&q=' + process.env.Q : ''));
+    await h.clickText('Продолжить');
+    // смотр при дневном свете: ряд людей разных должностей
+    await h.ev(() => {
+      const g = window.__game;
+      const sim = g.sim;
+      sim.time.state.t = 11 * 60 + 30;
+      sim.weather.state.kind = 'clear';
+      sim.weather.state.cloud = 0.25;
+      sim.weather.state.fog = 0.02;
+      sim.weather.state.rain = 0;
+      sim.weather.state.snow = 0;
+      const roles = ['guard', 'loader', 'gun_cmd', 'battery_cmd', 'ci_officer', 'mechanic', 'cook', 'medic', 'radio_op'];
+      roles.forEach((r, i) => {
+        const n = sim.npcs.list.find((x) => x.role === r);
+        if (!n) return;
+        sim.npcs.clearGoal(n);
+        n.x = 54.4 + i * 0.78;
+        n.z = 67.2 + (i % 2) * 0.25;
+        n.yaw = Math.PI;
+        n.anim = 'attention';
+        n.moving = false;
+        n.anchor = null;
+        n.gesture = null;
+        n.carry = null;
+      });
+      g.state = 'paused';
+      const p = sim.player;
+      p.x = 57.5; p.z = 63.6; p.yaw = 0; p.pitch = -0.06;
+      g.player.update(0.016, []);
+    });
+    await h.shot('60_lineup');
+    await h.ev(() => { const g = window.__game; const p = g.sim.player; p.x = 56.2; p.z = 66.1; p.yaw = 0.15; p.pitch = 0.02; g.player.update(0.016, []); });
+    await h.shot('61_faces');
+    await h.ev(() => { const g = window.__game; const n = g.sim.npcs.list.find((x) => x.role === 'battery_cmd'); const p = g.sim.player; p.x = n.x + 0.05; p.z = n.z - 0.75; p.yaw = 0; p.pitch = -0.02; g.player.update(0.016, []); });
+    await h.shot('61b_face_close');
+    await h.ev(() => { const g = window.__game; const n = g.sim.npcs.list.find((x) => x.role === 'guard'); const p = g.sim.player; p.x = n.x + 0.05; p.z = n.z - 0.9; p.yaw = 0; p.pitch = -0.05; g.player.update(0.016, []); });
+    await h.shot('61c_guard_close');
+    // зеркало в помещении командира и вид вниз
+    await h.ev(() => { const g = window.__game; const p = g.sim.player; p.x = 61.55; p.z = 15.6; p.yaw = -Math.PI / 2; p.pitch = -0.12; g.player.update(0.016, []); });
+    await h.shot('62_mirror');
+    await h.ev(() => { const g = window.__game; const p = g.sim.player; p.x = 60.42; p.z = 15.6; p.yaw = -Math.PI / 2; p.pitch = 0.04; g.player.update(0.016, []); });
+    await h.shot('62b_mirror_close');
+    await h.ev(() => { const g = window.__game; const p = g.sim.player; p.x = 62.6; p.z = 15.6; p.yaw = -Math.PI / 2; p.pitch = -0.1; g.player.update(0.016, []); });
+    await h.shot('63_mirror_far');
+    await h.ev(() => { const g = window.__game; const p = g.sim.player; p.x = 61.9; p.z = 15.6; p.yaw = -Math.PI / 2; p.pitch = -1.15; g.player.update(0.016, []); });
+    await h.shot('64_lookdown');
+    console.log(await h.info());
+    return h;
+  },
 };
 
 (async () => {

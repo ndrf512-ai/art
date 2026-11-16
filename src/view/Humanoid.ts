@@ -6,186 +6,9 @@
 import * as THREE from 'three';
 import type { AnimId, CarryKind } from '../core/types';
 
-export type HeadGear = 'helmet' | 'cap' | 'sidecap' | 'none' | 'headphones' | 'flatcap';
+import { B, buildBody, buildCollar, buildHead, detailFor, HIP_Y, Parts, type Look } from './HumanModel';
 
-export interface Look {
-  tunic: number;
-  trousers: number;
-  boots: number;
-  belt: number;
-  skin: number;
-  hair: number;
-  head: HeadGear;
-  headColor: number;
-  coat: boolean;
-  apron?: boolean;
-  armband?: boolean;
-  female?: boolean;
-  officer?: boolean;
-  /** Отдельная сетка головы на слое 1 (тело игрока: голова видна только в зеркале). */
-  splitHead?: boolean;
-  scale?: number;
-}
-
-const B = { root: 0, hips: 1, spine: 2, head: 3, armL: 4, foreL: 5, armR: 6, foreR: 7, legL: 8, shinL: 9, legR: 10, shinR: 11 } as const;
-const HIP_Y = 0.93;
-
-class Parts {
-  pos: number[] = [];
-  nor: number[] = [];
-  col: number[] = [];
-  skinI: number[] = [];
-  private m = new THREE.Matrix4();
-  private q = new THREE.Quaternion();
-  private e = new THREE.Euler();
-  private c = new THREE.Color();
-  private nm = new THREE.Matrix3();
-
-  add(geo: THREE.BufferGeometry, bone: number, color: number, x: number, y: number, z: number, sx = 1, sy = 1, sz = 1, rx = 0, ry = 0, rz = 0): void {
-    const g = geo.index ? geo.toNonIndexed() : geo;
-    this.e.set(rx, ry, rz);
-    this.m.compose(new THREE.Vector3(x, y, z), this.q.setFromEuler(this.e), new THREE.Vector3(sx, sy, sz));
-    this.nm.getNormalMatrix(this.m);
-    const p = g.attributes.position as THREE.BufferAttribute;
-    const n = g.attributes.normal as THREE.BufferAttribute;
-    const v = new THREE.Vector3();
-    this.c.set(color);
-    for (let i = 0; i < p.count; i++) {
-      v.fromBufferAttribute(p, i).applyMatrix4(this.m);
-      this.pos.push(v.x, v.y, v.z);
-      v.fromBufferAttribute(n, i).applyMatrix3(this.nm).normalize();
-      this.nor.push(v.x, v.y, v.z);
-      this.col.push(this.c.r, this.c.g, this.c.b);
-      this.skinI.push(bone, 0, 0, 0);
-    }
-    if (g !== geo) g.dispose();
-    geo.dispose();
-  }
-
-  cyl(bone: number, color: number, rTop: number, rBot: number, h: number, x: number, y: number, z: number, sx = 1, sz = 1, seg = 8, rx = 0, rz = 0): void {
-    this.add(new THREE.CylinderGeometry(rTop, rBot, h, seg), bone, color, x, y, z, sx, 1, sz, rx, 0, rz);
-  }
-
-  sphere(bone: number, color: number, r: number, x: number, y: number, z: number, sx = 1, sy = 1, sz = 1, seg = 8): void {
-    this.add(new THREE.SphereGeometry(r, seg, Math.max(5, seg - 2)), bone, color, x, y, z, sx, sy, sz);
-  }
-
-  box(bone: number, color: number, w: number, h: number, d: number, x: number, y: number, z: number, rx = 0, ry = 0, rz = 0): void {
-    this.add(new THREE.BoxGeometry(w, h, d), bone, color, x, y, z, 1, 1, 1, rx, ry, rz);
-  }
-
-  geometry(): THREE.BufferGeometry {
-    const g = new THREE.BufferGeometry();
-    const n = this.pos.length / 3;
-    g.setAttribute('position', new THREE.Float32BufferAttribute(this.pos, 3));
-    g.setAttribute('normal', new THREE.Float32BufferAttribute(this.nor, 3));
-    g.setAttribute('color', new THREE.Float32BufferAttribute(this.col, 3));
-    g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(n * 2), 2));
-    g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(this.skinI, 4));
-    const w = new Float32Array(n * 4);
-    for (let i = 0; i < n; i++) w[i * 4] = 1;
-    g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(w, 4));
-    g.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0.9, 0), 1.7);
-    g.boundingBox = new THREE.Box3(new THREE.Vector3(-1.2, -0.3, -1.2), new THREE.Vector3(1.2, 2.2, 1.2));
-    return g;
-  }
-}
-
-function buildHead(P: Parts, L: Look): void {
-  const y = 1.6;
-  P.sphere(B.head, L.skin, 0.1, 0, y, 0.005, 0.9, 1.1, 0.98, 10);
-  P.box(B.head, L.skin, 0.028, 0.04, 0.03, 0, y - 0.015, 0.1);
-  // волосы
-  if (L.female) {
-    P.sphere(B.head, L.hair, 0.106, 0, y + 0.012, -0.018, 0.95, 1.08, 1.0, 10);
-    P.sphere(B.head, L.hair, 0.06, 0, y - 0.03, -0.11, 1, 0.9, 0.9, 8);
-  } else if (L.head === 'none' || L.head === 'sidecap' || L.head === 'headphones') {
-    P.sphere(B.head, L.hair, 0.103, 0, y + 0.02, -0.02, 0.93, 1.0, 0.98, 8);
-  }
-  switch (L.head) {
-    case 'helmet':
-      P.sphere(B.head, L.headColor, 0.125, 0, y + 0.035, -0.005, 1, 0.82, 1.08, 10);
-      P.cyl(B.head, L.headColor, 0.128, 0.15, 0.06, 0, y - 0.035, -0.025, 1, 1.1, 10);
-      break;
-    case 'cap':
-      P.cyl(B.head, L.headColor, 0.11, 0.105, 0.05, 0, y + 0.085, 0, 1, 1, 10);
-      P.cyl(B.head, L.tunic, 0.135, 0.115, 0.045, 0, y + 0.125, -0.005, 1, 1, 10, -0.12);
-      P.box(B.head, 0x0c0c0c, 0.15, 0.012, 0.075, 0, y + 0.062, 0.105, 0.25);
-      break;
-    case 'sidecap':
-      P.box(B.head, L.headColor, 0.115, 0.06, 0.23, 0, y + 0.1, -0.005, 0, 0, 0.08);
-      break;
-    case 'flatcap':
-      P.cyl(B.head, L.headColor, 0.12, 0.115, 0.035, 0, y + 0.095, 0.01, 1, 1.1, 10);
-      P.box(B.head, L.headColor, 0.12, 0.01, 0.06, 0, y + 0.08, 0.12);
-      break;
-    case 'headphones':
-      P.box(B.head, L.headColor, 0.115, 0.06, 0.23, 0, y + 0.1, -0.005, 0, 0, 0.08);
-      P.cyl(B.head, 0x101010, 0.035, 0.035, 0.03, 0.098, y, 0, 1, 1, 8, 0, Math.PI / 2);
-      P.cyl(B.head, 0x101010, 0.035, 0.035, 0.03, -0.098, y, 0, 1, 1, 8, 0, Math.PI / 2);
-      P.box(B.head, 0x101010, 0.2, 0.012, 0.02, 0, y + 0.135, 0);
-      break;
-  }
-}
-
-function buildBody(P: Parts, L: Look): void {
-  const f = !!L.female;
-  const tun = L.tunic;
-  // таз и пола мундира / плащ
-  P.sphere(B.hips, L.trousers, 0.16, 0, 0.93, 0, f ? 1.1 : 1.05, 0.75, 0.8, 8);
-  if (L.coat) {
-    P.cyl(B.hips, tun, f ? 0.165 : 0.18, f ? 0.25 : 0.24, 0.56, 0, 0.7, 0, 1, 0.82, 10);
-  } else {
-    P.cyl(B.hips, tun, 0.175, 0.2, 0.2, 0, 0.9, 0, 1, 0.74, 10);
-  }
-  // торс
-  P.cyl(B.spine, tun, f ? 0.165 : 0.19, f ? 0.135 : 0.165, 0.42, 0, 1.2, 0, 1, 0.68, 10);
-  P.sphere(B.spine, tun, 0.12, 0, 1.415, 0, f ? 1.62 : 1.9, 0.5, 0.92, 8);
-  if (f) {
-    P.sphere(B.spine, tun, 0.074, 0.074, 1.3, 0.085, 1, 0.95, 0.9, 8);
-    P.sphere(B.spine, tun, 0.074, -0.074, 1.3, 0.085, 1, 0.95, 0.9, 8);
-  }
-  P.cyl(B.spine, L.skin, 0.045, 0.05, 0.09, 0, 1.475, 0, 1, 1, 8);
-  P.cyl(B.spine, tun, 0.065, 0.075, 0.045, 0, 1.45, 0, 1, 1, 8);
-  // ремень
-  P.cyl(B.spine, L.belt, f ? 0.142 : 0.172, f ? 0.142 : 0.172, 0.05, 0, 1.01, 0, 1, 0.7, 10);
-  P.box(B.spine, 0x8a8468, 0.05, 0.04, 0.02, 0, 1.01, f ? 0.1 : 0.122);
-  if (L.officer) {
-    P.box(B.spine, 0x9a9a8c, 0.09, 0.012, 0.045, 0.19, 1.468, 0);
-    P.box(B.spine, 0x9a9a8c, 0.09, 0.012, 0.045, -0.19, 1.468, 0);
-    P.box(B.hips, 0x2a1d14, 0.06, 0.13, 0.11, -0.185, 0.96, 0.02);
-  }
-  if (L.coat) {
-    // двубортный плащ / шинель: два ряда пуговиц и отложной воротник
-    const zf = f ? 0.108 : 0.126;
-    for (let i = 0; i < 4; i++) {
-      for (const sx of [-1, 1]) P.sphere(B.spine, 0x8f8f84, 0.012, sx * 0.045, 1.33 - i * 0.075, zf - (i === 0 && f ? -0.012 : 0), 1, 1, 0.6, 6);
-    }
-    for (const sx of [-1, 1]) P.box(B.spine, L.tunic, 0.075, 0.11, 0.012, sx * 0.06, 1.41, zf - 0.02, 0.25, 0, sx * -0.5);
-    for (let i = 0; i < 2; i++) for (const sx of [-1, 1]) P.sphere(B.hips, 0x8f8f84, 0.012, sx * 0.045, 0.93 - i * 0.09, f ? 0.142 : 0.15, 1, 1, 0.6, 6);
-  }
-  if (L.apron) P.box(B.spine, 0xb9b5a8, 0.3, 0.46, 0.02, 0, 1.08, 0.125);
-  if (L.armband) P.cyl(B.armL, 0xc8c4b8, 0.057, 0.057, 0.06, 0.215, 1.3, 0, 1, 1, 8);
-  // руки
-  for (const s of [1, -1]) {
-    const arm = s > 0 ? B.armL : B.armR;
-    const fore = s > 0 ? B.foreL : B.foreR;
-    const x = s * (f ? 0.195 : 0.215);
-    P.sphere(arm, tun, 0.058, x, 1.42, 0, 1, 1, 1, 8);
-    P.cyl(arm, tun, 0.052, 0.046, 0.29, x, 1.275, 0, 1, 1, 8);
-    P.cyl(fore, tun, 0.044, 0.037, 0.25, x, 1.005, 0, 1, 1, 8);
-    P.sphere(fore, L.officer && !f ? 0x2a2622 : L.skin, 0.042, x, 0.855, 0.005, 0.85, 1.15, 1, 8);
-  }
-  // ноги
-  for (const s of [1, -1]) {
-    const leg = s > 0 ? B.legL : B.legR;
-    const shin = s > 0 ? B.shinL : B.shinR;
-    const x = s * 0.095;
-    P.cyl(leg, L.trousers, 0.083, 0.064, 0.44, x, 0.7, 0, 1, 1, 8);
-    P.cyl(shin, L.boots, 0.062, 0.052, 0.4, x, 0.28, 0, 1, 1, 8);
-    P.box(shin, L.boots, 0.095, 0.085, 0.25, x, 0.045, 0.045);
-  }
-}
+export type { HeadGear, Kit, Look } from './HumanModel';
 
 export interface Pose {
   hipY: number;
@@ -520,9 +343,11 @@ export function computePose(p: Pose, anim: AnimId, move: MoveAnim, t: number, ph
 }
 
 let cheapFigures = false;
-/** На слабых устройствах фигуры рисуются упрощённым материалом. */
-export function setCheapFigures(on: boolean): void {
+let figureDetail: 0 | 1 | 2 = 2;
+/** На слабых устройствах фигуры рисуются упрощённым материалом и с меньшей детализацией. */
+export function setCheapFigures(on: boolean, detail: 0 | 1 | 2 = on ? 0 : 2): void {
   cheapFigures = on;
+  figureDetail = detail;
 }
 
 const SHARED: Record<string, THREE.Material> = {};
@@ -551,10 +376,12 @@ export class Figure {
   private ea = new THREE.Euler();
 
   constructor(look: Look, black1: THREE.Texture, armed: boolean) {
+    const D = detailFor(look.splitHead ? Math.max(1, figureDetail) as 1 | 2 : figureDetail);
     const P = new Parts();
-    buildBody(P, look);
+    buildBody(P, look, D);
     const HP = look.splitHead ? new Parts() : P;
-    buildHead(HP, look);
+    buildCollar(HP, look, D);
+    buildHead(HP, look, D);
 
     const mk = (x: number, y: number, z: number, parent: THREE.Bone | null): THREE.Bone => {
       const b = new THREE.Bone();
@@ -580,11 +407,22 @@ export class Figure {
     this.material = (cheapFigures
       ? new THREE.MeshLambertMaterial({ vertexColors: true, aoMap: black1, aoMapIntensity: 0 })
       : new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0, aoMap: black1, aoMapIntensity: 0 })) as THREE.MeshStandardMaterial;
-    // свет ламп действует как освещение, а не как свечение: тёмная ткань остаётся тёмной
+    // свет ламп действует как освещение, а не как свечение: тёмная ткань остаётся тёмной;
+    // шероховатость и металличность заданы по вершинам — кожа плаща, сапоги и пуговицы блестят
+    const pbr = !cheapFigures;
     this.material.onBeforeCompile = (shader) => {
-      shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance *= diffuseColor.rgb;');
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nattribute float rough;\nattribute float metal;\nvarying float vRough;\nvarying float vMetal;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvRough = rough;\nvMetal = metal;');
+      let fs = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nvarying float vRough;\nvarying float vMetal;')
+        .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance *= diffuseColor.rgb;');
+      if (pbr) {
+        fs = fs.replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = vRough;').replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = vMetal;');
+      }
+      shader.fragmentShader = fs;
     };
-    this.material.customProgramCacheKey = () => 'figure-lit';
+    this.material.customProgramCacheKey = () => (pbr ? 'figure-pbr' : 'figure-lit');
     const skeleton = new THREE.Skeleton(this.bones);
     this.mesh = new THREE.SkinnedMesh(P.geometry(), this.material);
     this.mesh.add(root);

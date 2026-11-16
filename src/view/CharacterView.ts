@@ -15,6 +15,7 @@ import type { WorldView } from './WorldBuilder';
 const SKINS = [0xc9a487, 0xbf9a7c, 0xd3ae92, 0xb89074, 0xcfa98b];
 const HAIRS = [0x2a211a, 0x3b2c1e, 0x4a3a28, 0x1c1814, 0x6b5a3c, 0x55504a];
 const FELDGRAU = [0x596352, 0x56604f, 0x5d6657, 0x525c4c];
+const EYES = [0x4a5a6a, 0x5a4632, 0x58664c, 0x3c4a5c, 0x6a6458];
 
 function hashId(id: string): number {
   let h = 7;
@@ -36,6 +37,13 @@ export function lookFor(n: NpcState): Look {
     headColor: FELDGRAU[h % FELDGRAU.length],
     coat: false,
     scale: 0.96 + ((h >> 7) % 9) * 0.01,
+    kit: 'none',
+    face: ((h >> 9) % 100) / 100,
+    eyes: EYES[(h >> 11) % EYES.length],
+    mustache: n.age > 30 && (h >> 13) % 3 === 0,
+    glasses: (h >> 15) % 14 === 0,
+    nco: n.rank >= 4 && n.rank < 8,
+    trim: 0x4c5444,
   };
   if (n.rank >= 8) {
     L.officer = true;
@@ -43,7 +51,16 @@ export function lookFor(n: NpcState): Look {
     L.headColor = 0x2e3a30;
     L.tunic = 0x5c6558;
     L.trousers = 0x62655e;
+    L.trim = 0xa9a99c;
+    L.kit = 'officer';
+    L.gloves = n.role === 'inspector' || n.role === 'ci_officer' ? 0x2a1e16 : undefined;
+    L.boots = 0x100e0c;
     L.coat = n.role === 'security_chief' || n.role === 'ci_officer' || n.role === 'inspector' || n.role === 'courier';
+    L.leather = n.role === 'ci_officer';
+    if (L.leather) {
+      L.tunic = 0x24221f;
+      L.headColor = 0x2a2a28;
+    }
   }
   switch (n.role) {
     case 'guard':
@@ -52,6 +69,8 @@ export function lookFor(n: NpcState): Look {
       L.head = n.role === 'guard_sgt' ? 'sidecap' : 'helmet';
       L.headColor = 0x39412f;
       L.coat = n.role !== 'guard_sgt';
+      L.kit = 'rifleman';
+      L.trim = 0xdedcd0;
       break;
     case 'gun_cmd':
     case 'gunner':
@@ -60,15 +79,21 @@ export function lookFor(n: NpcState): Look {
     case 'bearer':
       L.head = n.role === 'gun_cmd' ? 'sidecap' : 'helmet';
       L.headColor = n.role === 'gun_cmd' ? L.tunic : 0x3b4332;
+      L.kit = n.role === 'gun_cmd' ? 'none' : 'gunner';
+      L.trim = 0x9b2a20;
       break;
     case 'mech_chief':
     case 'mechanic':
     case 'electrician':
     case 'driver':
       L.tunic = 0x3a3f46;
-      L.trousers = 0x363b42;
+      L.trousers = 0x3a3f46;
       L.headColor = 0x33383e;
       L.belt = 0x2c2f33;
+      L.overall = n.role !== 'mech_chief';
+      L.kit = n.role === 'driver' ? 'none' : 'worker';
+      L.head = n.role === 'driver' ? 'flatcap' : 'sidecap';
+      L.trim = 0x2a2d30;
       break;
     case 'cook':
     case 'cook_helper':
@@ -98,22 +123,45 @@ export function lookFor(n: NpcState): Look {
       L.belt = 0x4a3c2c;
       break;
     case 'intruder':
-      L.tunic = 0x45462f;
+      L.tunic = 0x4a4b33;
       L.trousers = 0x3c3d2a;
       L.head = 'helmet';
       L.headColor = 0x30321f;
       L.belt = 0x2a2a1c;
+      L.camo = true;
+      L.kit = 'rifleman';
+      L.nco = false;
       break;
   }
   return L;
 }
 
-/** Внешность командира. Героиня носит длинный чёрный плащ. */
+/** Внешность командира. Героиня носит длинный чёрный кожаный плащ. */
 export function playerLook(gender: Gender): Look {
   if (gender === 'f') {
-    return { tunic: 0x1d1e21, trousers: 0x18191b, boots: 0x0d0d0d, belt: 0x0b0b0b, skin: 0xdcb9a0, hair: 0xc3a465, head: 'cap', headColor: 0x17181a, coat: true, female: true, officer: true, splitHead: true, scale: 0.97 };
+    return {
+      tunic: 0x161618,
+      trousers: 0x141416,
+      boots: 0x0a0a0a,
+      belt: 0x0c0c0c,
+      skin: 0xe2c0a8,
+      hair: 0xcaa968,
+      head: 'cap',
+      headColor: 0x141416,
+      coat: true,
+      leather: true,
+      female: true,
+      officer: true,
+      splitHead: true,
+      scale: 0.97,
+      kit: 'officer',
+      gloves: 0x0d0d0e,
+      trim: 0xb9b7ad,
+      eyes: 0x4f6f86,
+      face: 0.3,
+    };
   }
-  return { tunic: 0x5c6558, trousers: 0x62655e, boots: 0x161412, belt: 0x231b13, skin: 0xc9a487, hair: 0x3b2c1e, head: 'cap', headColor: 0x2e3a30, coat: true, officer: true, splitHead: true, scale: 1.0 };
+  return { tunic: 0x5c6558, trousers: 0x62655e, boots: 0x100e0c, belt: 0x231b13, skin: 0xc9a487, hair: 0x3b2c1e, head: 'cap', headColor: 0x2e3a30, coat: true, officer: true, splitHead: true, scale: 1.0, kit: 'officer', gloves: 0x2a1e16, trim: 0xa9a99c, eyes: 0x5a6a52, face: 0.6 };
 }
 
 interface Entry {
@@ -269,13 +317,16 @@ export class CharacterView {
     // тело командира: видно при взгляде вниз, голова — только в зеркале
     const p = sim.player;
     const fig = this.ensurePlayer();
-    const sp = Math.hypot(p.x - this.pPrev.x, p.z - this.pPrev.z) / Math.max(dt, 1e-3);
+    let sp = Math.hypot(p.x - this.pPrev.x, p.z - this.pPrev.z) / Math.max(dt, 1e-3);
+    // перенос (загрузка, медпункт) — не бег
+    if (sp > 12) sp = 0;
     this.pSpeed = damp(this.pSpeed, sp, 10, dt);
     this.pPrev.x = p.x;
     this.pPrev.z = p.z;
     const fx = Math.sin(p.yaw);
     const fz = Math.cos(p.yaw);
-    fig.group.position.set(p.x - fx * 0.13, 0, p.z - fz * 0.13);
+    // торс чуть впереди глаз по вертикали: при взгляде вниз видно грудь и полы плаща
+    fig.group.position.set(p.x - fx * 0.075, 0, p.z - fz * 0.075);
     fig.group.rotation.y = p.yaw;
     const move: MoveAnim = this.pSpeed > 0.4 ? (this.pSpeed > 4.4 ? 'run' : 'walk') : null;
     fig.update(dt, this.time, 'idle', move, this.pSpeed * 0.5, null, false);

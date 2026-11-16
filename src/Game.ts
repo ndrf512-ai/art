@@ -83,7 +83,7 @@ export class Game implements GameApi {
       requestAnimationFrame(this.frame);
     });
     setTextureScale(this.quality.texScale);
-    setCheapFigures(this.quality.cheapMaterials);
+    setCheapFigures(this.quality.cheapMaterials, this.quality.level === 'high' ? 2 : this.quality.level === 'medium' ? 1 : 0);
     this.M = new Materials(this.quality.cheapMaterials);
     this.sim.newGame({ seed: 1944 });
     this.world = buildWorld(this.sim.layout, this.M, this.quality.treeDensity);
