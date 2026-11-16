@@ -98,6 +98,7 @@ export class UIManager {
       const p = this.sim.player;
       const d = Math.hypot(n.x - p.x, n.z - p.z);
       if (d > (quiet ? 8 : 16)) return;
+      if (quiet && !this.sim.grid.los(p.x, p.z, n.x, n.z)) return;
       if (this.dlgView && this.dlgView.npcId === id) return;
       this.sub(fullName(n), text, quiet);
       this.game.audio.murmur(d);

@@ -111,7 +111,7 @@ export function lookFor(n: NpcState): Look {
 /** Внешность командира. Героиня носит длинный чёрный плащ. */
 export function playerLook(gender: Gender): Look {
   if (gender === 'f') {
-    return { tunic: 0x121213, trousers: 0x141415, boots: 0x0c0c0c, belt: 0x0a0a0a, skin: 0xd8b49a, hair: 0xb99a5c, head: 'cap', headColor: 0x0e0e0f, coat: true, female: true, officer: true, splitHead: true, scale: 0.97 };
+    return { tunic: 0x1d1e21, trousers: 0x18191b, boots: 0x0d0d0d, belt: 0x0b0b0b, skin: 0xdcb9a0, hair: 0xc3a465, head: 'cap', headColor: 0x17181a, coat: true, female: true, officer: true, splitHead: true, scale: 0.97 };
   }
   return { tunic: 0x5c6558, trousers: 0x62655e, boots: 0x161412, belt: 0x231b13, skin: 0xc9a487, hair: 0x3b2c1e, head: 'cap', headColor: 0x2e3a30, coat: true, officer: true, splitHead: true, scale: 1.0 };
 }

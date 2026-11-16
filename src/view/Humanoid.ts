@@ -155,6 +155,15 @@ function buildBody(P: Parts, L: Look): void {
     P.box(B.spine, 0x9a9a8c, 0.09, 0.012, 0.045, -0.19, 1.468, 0);
     P.box(B.hips, 0x2a1d14, 0.06, 0.13, 0.11, -0.185, 0.96, 0.02);
   }
+  if (L.coat) {
+    // двубортный плащ / шинель: два ряда пуговиц и отложной воротник
+    const zf = f ? 0.108 : 0.126;
+    for (let i = 0; i < 4; i++) {
+      for (const sx of [-1, 1]) P.sphere(B.spine, 0x8f8f84, 0.012, sx * 0.045, 1.33 - i * 0.075, zf - (i === 0 && f ? -0.012 : 0), 1, 1, 0.6, 6);
+    }
+    for (const sx of [-1, 1]) P.box(B.spine, L.tunic, 0.075, 0.11, 0.012, sx * 0.06, 1.41, zf - 0.02, 0.25, 0, sx * -0.5);
+    for (let i = 0; i < 2; i++) for (const sx of [-1, 1]) P.sphere(B.hips, 0x8f8f84, 0.012, sx * 0.045, 0.93 - i * 0.09, f ? 0.142 : 0.15, 1, 1, 0.6, 6);
+  }
   if (L.apron) P.box(B.spine, 0xb9b5a8, 0.3, 0.46, 0.02, 0, 1.08, 0.125);
   if (L.armband) P.cyl(B.armL, 0xc8c4b8, 0.057, 0.057, 0.06, 0.215, 1.3, 0, 1, 1, 8);
   // руки

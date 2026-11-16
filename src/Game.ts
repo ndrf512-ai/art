@@ -290,8 +290,9 @@ export class Game implements GameApi {
     const power = sim.resources.state.power;
     const menu = this.state === 'menu';
     const env: EnvState = {
-      hour: sim.time.hour,
-      darkness: sim.time.darkness(),
+      // в меню — всегда предрассветные сумерки, чтобы объект был виден
+      hour: menu ? 7.1 : sim.time.hour,
+      darkness: menu ? 0.42 : sim.time.darkness(),
       cloud: w.cloud,
       fog: Math.min(1, w.fog + w.rain * 0.12 + w.snow * 0.15),
       power,
@@ -303,7 +304,7 @@ export class Game implements GameApi {
     this.chars.update(dt);
     this.machines.update(dt);
     this.world.setHangarDoor(sim.artillery.state.hangarDoor);
-    const gateBusy = sim.supply.vehicles.some((v) => v.state === 'driving' && dist(v.x, v.z, 57.5, 121) < 16);
+    const gateBusy = sim.supply.vehicles.some((v) => v.state === 'driving' && dist(v.x, v.z, 57.5, 121) < 16) || (!menu && dist(p.x, p.z, 57.5, 121) < 9);
     this.barrier = damp(this.barrier, gateBusy ? 1 : 0, 3, dt);
     this.world.setBarrier(this.barrier);
     this.sr.update(dt, env);
