@@ -201,7 +201,7 @@ export class SpySystem {
     }
     a.act = null;
     const phase = e.phase;
-    a.nextActAt = sim.now + sim.rng.range(900, 1500) / (1 + phase * 0.25);
+    a.nextActAt = sim.now + sim.rng.range(560, 980) / (1 + phase * 0.25);
   }
 
   /** Радисты засекли чужую передачу из района объекта. */

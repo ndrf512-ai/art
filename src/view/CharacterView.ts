@@ -160,11 +160,14 @@ export class CharacterView {
       const w = swap ? p.d : p.w;
       const geo = new THREE.PlaneGeometry(w, p.h);
       let obj: THREE.Object3D;
-      if (this.quality.level === 'low') {
+      const res = this.quality.mirrorRes;
+      if (res <= 0) {
         obj = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0x4a5250, roughness: 0.15, metalness: 0.9 }));
       } else {
-        const res = this.quality.level === 'high' ? 768 : 512;
         const r = new Reflector(geo, { textureWidth: Math.round((res * w) / p.h), textureHeight: res, color: 0x9aa3a0, clipBias: 0.003, multisample: 0 });
+        // 8-битная цель рендера: половинная точность поддерживается не всеми мобильными видеочипами
+        const rt = (r as any).getRenderTarget?.() as THREE.WebGLRenderTarget | undefined;
+        if (rt) rt.texture.type = THREE.UnsignedByteType;
         (r as any).getReflectionCamera?.(this.camera).layers.enable(1);
         obj = r;
       }

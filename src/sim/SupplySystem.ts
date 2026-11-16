@@ -218,10 +218,15 @@ export class SupplySystem {
     return this.state.jobs.some((j) => j.item === 'niche' && j.gun === gun && j.state !== 'done');
   }
 
+  private nicheJobs(gun: GunId): number {
+    return this.state.jobs.filter((j) => j.item === 'niche' && j.gun === gun && j.state !== 'done').length;
+  }
+
   /** Подносчики пополняют запас снарядов у орудия со склада. */
   requestNiche(gun: GunId, shell: ShellId): void {
     const sim = this.sim;
-    if (this.hasNicheJob(gun) || sim.resources.ammo(shell) <= 0) return;
+    // одновременно носят двое: подносчик и номер расчёта
+    if (this.nicheJobs(gun) >= 2 || sim.resources.ammo(shell) <= 0) return;
     const site = sim.layout.guns[gun];
     const g = sim.artillery.gun(gun);
     const niche = g.atAlt && site.kind === 'howitzer' ? site.nicheAlt : site.niche;
@@ -253,12 +258,12 @@ export class SupplySystem {
       if (!j.roles.includes(n.role)) continue;
       if (j.gun && n.unit !== j.gun) continue;
       if (j.item === 'niche') {
-        // подносят свободные номера; заряжающий — только если подносчика нет
+        // подносят подносчик и помощники; командир и наводчик от орудия не отходят
         const g = sim.artillery.gun(j.gun!);
         const slot = g.crew.indexOf(n.id);
-        const bearerFit = sim.npcs.byId(g.crew[g.crew.length - 1])?.status === 'active';
-        if (slot !== g.crew.length - 1 && bearerFit) continue;
         if (slot <= 1) continue;
+        const fitHaulers = g.crew.slice(3).filter((id) => sim.npcs.byId(id)?.status === 'active').length;
+        if (slot === 2 && fitHaulers > 0) continue;
       } else {
         if (sim.schedule.block(n) !== 'duty') continue;
         if (n.goal.startsWith('crew:')) continue;
@@ -273,7 +278,7 @@ export class SupplySystem {
     const j = best;
     return {
       key: `haul:${j.id}`,
-      score: j.item === 'niche' ? 84 : 58,
+      score: j.item === 'niche' ? 93 : 58,
       task: j.item === 'niche' ? 'Подноска снарядов к орудию' : `Разгрузка: ${ITEM_NAMES[j.item as SupplyItem] ?? 'груз'}`,
       abort: { fn: 'haul.release', a: j.id },
       plan: () => {
@@ -367,7 +372,7 @@ export class SupplySystem {
       for (const g of sim.artillery.guns()) {
         const rail = sim.layout.guns[g.id].kind === 'rail';
         const shell: ShellId = rail ? 'he38' : 'he21';
-        if ((g.niche[shell] ?? 0) < (rail ? 2 : 4) && g.phase === 'idle' && sim.guard.isDay()) this.requestNiche(g.id, shell);
+        if ((g.niche[shell] ?? 0) < (rail ? 2 : 6) && g.phase === 'idle' && sim.guard.isDay() && !sim.combat.underFire) this.requestNiche(g.id, shell);
       }
     }
   }

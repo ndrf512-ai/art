@@ -1,8 +1,12 @@
 /**
- * Пресеты качества графики. На телефоне по умолчанию «среднее»; дополнительно
+ * Пресеты качества графики. На телефоне по умолчанию «низкое»; при потере
+ * графического контекста игра сама переходит на уровень ниже. Дополнительно
  * работает автоподстройка разрешения рендера под фактическую частоту кадров.
  */
-export type QualityLevel = 'low' | 'medium' | 'high';
+export type QualityLevel = 'minimal' | 'low' | 'medium' | 'high';
+
+export const QUALITY_ORDER: QualityLevel[] = ['minimal', 'low', 'medium', 'high'];
+export const QUALITY_NAMES: Record<QualityLevel | 'auto', string> = { auto: 'Авто', minimal: 'Минимальное', low: 'Низкое', medium: 'Среднее', high: 'Высокое' };
 
 export interface QualitySettings {
   level: QualityLevel;
@@ -14,13 +18,18 @@ export interface QualitySettings {
   treeDensity: number;
   npcShadowDist: number;
   particles: number;
-  normalMaps: boolean;
+  /** Модель Ламберта вместо физически корректной, без карт нормалей. */
+  cheapMaterials: boolean;
+  texScale: number;
+  /** Разрешение отражения в зеркалах (0 — зеркало без отражения). */
+  mirrorRes: number;
 }
 
 const PRESETS: Record<QualityLevel, QualitySettings> = {
-  low: { level: 'low', pixelRatioCap: 1, shadows: false, shadowSize: 512, poolLights: 3, antialias: false, treeDensity: 0.45, npcShadowDist: 0, particles: 0.5, normalMaps: false },
-  medium: { level: 'medium', pixelRatioCap: 1.5, shadows: true, shadowSize: 1024, poolLights: 4, antialias: false, treeDensity: 0.7, npcShadowDist: 22, particles: 0.8, normalMaps: true },
-  high: { level: 'high', pixelRatioCap: 2, shadows: true, shadowSize: 2048, poolLights: 7, antialias: true, treeDensity: 1, npcShadowDist: 45, particles: 1, normalMaps: true },
+  minimal: { level: 'minimal', pixelRatioCap: 0.8, shadows: false, shadowSize: 512, poolLights: 1, antialias: false, treeDensity: 0.25, npcShadowDist: 0, particles: 0.3, cheapMaterials: true, texScale: 0.5, mirrorRes: 192 },
+  low: { level: 'low', pixelRatioCap: 1, shadows: false, shadowSize: 512, poolLights: 2, antialias: false, treeDensity: 0.4, npcShadowDist: 0, particles: 0.5, cheapMaterials: true, texScale: 0.5, mirrorRes: 256 },
+  medium: { level: 'medium', pixelRatioCap: 1.25, shadows: true, shadowSize: 1024, poolLights: 4, antialias: false, treeDensity: 0.7, npcShadowDist: 18, particles: 0.8, cheapMaterials: false, texScale: 1, mirrorRes: 384 },
+  high: { level: 'high', pixelRatioCap: 2, shadows: true, shadowSize: 2048, poolLights: 7, antialias: true, treeDensity: 1, npcShadowDist: 45, particles: 1, cheapMaterials: false, texScale: 1, mirrorRes: 768 },
 };
 
 export function isTouchDevice(): boolean {
@@ -58,6 +67,15 @@ export function saveUserSettings(s: UserSettings): void {
 }
 
 export function resolveQuality(s: UserSettings): QualitySettings {
-  const level: QualityLevel = s.quality === 'auto' ? (isTouchDevice() ? 'medium' : 'high') : s.quality;
+  let level: QualityLevel = s.quality === 'auto' ? (isTouchDevice() ? 'low' : 'high') : s.quality;
+  // для проверки: ?q=low в адресе
+  const forced = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('q') : null;
+  if (forced && forced in PRESETS) level = forced as QualityLevel;
   return { ...PRESETS[level] };
+}
+
+/** Уровень ниже текущего (или null, если ниже некуда). */
+export function lowerQuality(level: QualityLevel): QualityLevel | null {
+  const i = QUALITY_ORDER.indexOf(level);
+  return i > 0 ? QUALITY_ORDER[i - 1] : null;
 }

@@ -519,6 +519,12 @@ export function computePose(p: Pose, anim: AnimId, move: MoveAnim, t: number, ph
   }
 }
 
+let cheapFigures = false;
+/** На слабых устройствах фигуры рисуются упрощённым материалом. */
+export function setCheapFigures(on: boolean): void {
+  cheapFigures = on;
+}
+
 const SHARED: Record<string, THREE.Material> = {};
 function sharedMat(name: string, color: number, metal = 0.2): THREE.Material {
   return (SHARED[name] ??= new THREE.MeshStandardMaterial({ color, roughness: 0.75, metalness: metal }));
@@ -571,7 +577,9 @@ export class Figure {
     const legR = mk(-0.095, 0.92 - HIP_Y, 0, hips);
     mk(0, -0.44, 0, legR);
 
-    this.material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0, aoMap: black1, aoMapIntensity: 0 });
+    this.material = (cheapFigures
+      ? new THREE.MeshLambertMaterial({ vertexColors: true, aoMap: black1, aoMapIntensity: 0 })
+      : new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0, aoMap: black1, aoMapIntensity: 0 })) as THREE.MeshStandardMaterial;
     // свет ламп действует как освещение, а не как свечение: тёмная ткань остаётся тёмной
     this.material.onBeforeCompile = (shader) => {
       shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance *= diffuseColor.rgb;');

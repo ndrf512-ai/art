@@ -57,7 +57,7 @@ export class EnemySystem {
     s.intel = 4;
     s.pressure = 0.15;
     s.phase = 0;
-    s.front = { 4: 100, 5: 100, 6: 100, 7: 100 };
+    s.front = { 1: 100, 2: 100, 3: 100, 4: 100, 5: 100, 6: 100, 7: 100 };
     s.owner = {};
     for (const n of NODES) s.owner[n.id] = n.tier <= 2 ? 'us' : 'enemy';
     s.bridgeDown = {};
@@ -224,7 +224,7 @@ export class EnemySystem {
       }
     }
     // пехота на переднем крае пополняется, если её не атакуют
-    for (const n of FRONT_NODES) if (s.owner[n] === 'us') s.front[n] = Math.min(100, (s.front[n] ?? 0) + gdt * 0.012);
+    for (const n of [1, 2, 3, ...FRONT_NODES]) if (s.owner[n] === 'us') s.front[n] = Math.min(100, (s.front[n] ?? 0) + gdt * 0.012);
     s.pressure = clamp(0.1 + s.phase * 0.2 + (400 - (s.front[4] + s.front[5] + s.front[6] + s.front[7])) / 900, 0, 1);
   }
 
@@ -292,7 +292,9 @@ export class EnemySystem {
           }
         } else if (u.state === 'advance' && atNode && s.owner[node] === 'us') {
           // бой за пункт
-          const k = (u.type === 'armor' ? 0.9 : 0.55) * (u.strength / 100) * (now < u.smokeUntil ? 0.2 : 1) * (u.suppress > 40 ? 0.4 : 1);
+          // в тылу пункты держат резервы: там наступать вдвое труднее
+          const rear = NODES[node].tier === 1 ? 0.5 : 1;
+          const k = (u.type === 'armor' ? 0.9 : 0.55) * rear * (u.strength / 100) * (now < u.smokeUntil ? 0.2 : 1) * (u.suppress > 40 ? 0.4 : 1);
           s.front[node] = (s.front[node] ?? 60) - k;
           u.strength -= rng.range(0.3, 1.1);
           if ((s.front[node] ?? 0) <= 0) this.capture(node);
@@ -303,10 +305,11 @@ export class EnemySystem {
           }
         } else if (u.state === 'advance' && s.owner[node] === 'enemy') {
           // пункт взят — следующая цель глубже в нашем тылу
+          // до общего наступления противник закрепляется на взятом переднем крае
           const next = FRONT_NODES.includes(node) ? 1 : 0;
           u.objective = next;
           const r = this.route(node, next);
-          if (r.length > 1 && s.phase >= 2) {
+          if (r.length > 1 && s.phase >= 3) {
             u.route = r;
             u.routeI = 1;
             u.state = 'move';

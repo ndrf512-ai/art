@@ -15,7 +15,9 @@ import { CharacterView } from './view/CharacterView';
 import { Effects } from './view/Effects';
 import { MachineView } from './view/MachineView';
 import { Materials } from './view/Materials';
-import { isTouchDevice, loadUserSettings, resolveQuality, saveUserSettings, type QualitySettings, type UserSettings } from './view/Quality';
+import { isTouchDevice, loadUserSettings, lowerQuality, QUALITY_NAMES, resolveQuality, saveUserSettings, type QualityLevel, type QualitySettings, type UserSettings } from './view/Quality';
+import { setCheapFigures } from './view/Humanoid';
+import { setTextureScale } from './view/Textures';
 import { SceneRenderer, type EnvState } from './view/SceneRenderer';
 import { buildPhone } from './view/Props';
 import { Batcher } from './view/Batcher';
@@ -46,13 +48,43 @@ export class Game implements GameApi {
   private focus = new THREE.Vector3(60, 0, 80);
   private barrier = 0;
   private menuT = 0;
+  /** Шейдеры скомпилированы — можно рисовать (до этого экран чёрный). */
+  private ready = false;
+  private lost = false;
+  gpuName = 'неизвестен';
   frames = 0;
+
+  get qualityLevel(): QualityLevel {
+    return this.quality.level;
+  }
 
   constructor(canvas: HTMLCanvasElement, uiRoot: HTMLElement) {
     const params = new URLSearchParams(location.search);
     this.touch = isTouchDevice() || params.has('touch') || (typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches);
     this.sr = new SceneRenderer(canvas, this.quality);
-    this.M = new Materials();
+    try {
+      const gl = this.sr.renderer.getContext();
+      const ext = gl.getExtension('WEBGL_debug_renderer_info');
+      this.gpuName = String(gl.getParameter(ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER));
+    } catch {
+      /* сведения о видеочипе недоступны */
+    }
+    // потеря графического контекста (видеочип не справился): сохраняемся и перезапускаемся проще
+    canvas.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();
+      this.onContextLost();
+    });
+    // на минимальном качестве не перезапускаемся по кругу, а ждём, пока система вернёт видеоконтекст
+    canvas.addEventListener('webglcontextrestored', () => {
+      if (!this.lost || this.quality.level !== 'minimal') return;
+      this.lost = false;
+      this.ui.fade.classList.remove('on');
+      this.ui.fade.textContent = '';
+      requestAnimationFrame(this.frame);
+    });
+    setTextureScale(this.quality.texScale);
+    setCheapFigures(this.quality.cheapMaterials);
+    this.M = new Materials(this.quality.cheapMaterials);
     this.sim.newGame({ seed: 1944 });
     this.world = buildWorld(this.sim.layout, this.M, this.quality.treeDensity);
     this.sr.scene.add(this.world.group);
@@ -90,7 +122,69 @@ export class Game implements GameApi {
     this.ui.mainMenu();
     const auto = params.get('autostart');
     if (auto) this.newGame(auto === 'f' ? 'f' : 'm');
+    else if (this.takeResumeFlag()) this.continueGame();
+    // шейдеры компилируются заранее и, где возможно, параллельно — без долгого «первого кадра»
+    this.chars.update(0);
+    this.ui.fade.classList.add('on');
+    this.ui.fade.textContent = 'Подготовка графики…';
+    const done = (): void => {
+      if (this.ready) return;
+      this.ready = true;
+      if (!this.sleeping) {
+        this.ui.fade.classList.remove('on');
+        this.ui.fade.textContent = '';
+      }
+    };
+    this.sr.renderer.compileAsync(this.sr.scene, this.sr.camera).then(done, done);
+    setTimeout(done, 30000);
     requestAnimationFrame(this.frame);
+  }
+
+  private takeResumeFlag(): boolean {
+    try {
+      const v = localStorage.getItem('granit.resume');
+      localStorage.removeItem('granit.resume');
+      return v === '1';
+    } catch {
+      return false;
+    }
+  }
+
+  private onContextLost(): void {
+    if (this.lost) return;
+    this.lost = true;
+    const playing = this.state === 'playing' || this.state === 'paused';
+    if (playing) this.save.save('auto');
+    if (this.quality.level === 'minimal') {
+      this.ui.fade.classList.add('on');
+      this.ui.fade.textContent = 'Видеочип временно недоступен. Игра сохранена — ждём восстановления графики…';
+      return;
+    }
+    const next = lowerQuality(this.quality.level) ?? 'minimal';
+    this.settings.quality = next;
+    saveUserSettings(this.settings);
+    try {
+      if (playing) localStorage.setItem('granit.resume', '1');
+    } catch {
+      /* нет хранилища */
+    }
+    this.ui.fade.classList.add('on');
+    this.ui.fade.textContent = `Видеочип не справился с нагрузкой. Перезапуск с качеством «${QUALITY_NAMES[next]}»…`;
+    setTimeout(() => location.reload(), 1800);
+  }
+
+  /** Применить новое качество графики: сохранение и перезапуск страницы. */
+  restartGraphics(): void {
+    if (this.state === 'playing' || this.state === 'paused') {
+      this.save.save('auto');
+      try {
+        localStorage.setItem('granit.resume', '1');
+      } catch {
+        /* нет хранилища */
+      }
+    }
+    saveUserSettings(this.settings);
+    location.reload();
   }
 
   private onAppPause(): void {
@@ -135,6 +229,12 @@ export class Game implements GameApi {
     });
     bus.on('world:fire', ({ x, z, on, id }) => this.fx.setFire(id, x, z, on));
     bus.on('world:plane', () => this.audio.plane());
+    bus.on('player:knockout', ({ hours }) => {
+      this.ui.closePanel();
+      this.ui.closeDialogue();
+      this.sleep(hours * 60, true);
+      this.ui.fade.textContent = 'Вы ранены…';
+    });
     bus.on('time:day', () => {
       if (this.state === 'playing') this.save.save('auto');
     });
@@ -199,9 +299,10 @@ export class Game implements GameApi {
   }
 
   /** Отдых командира: время идёт быстро, мир продолжает жить. */
-  sleep(minutes: number): void {
+  sleep(minutes: number, unconscious = false): void {
     if (this.state !== 'playing') return;
-    this.sleeping = { until: this.sim.now + minutes, alert: this.sim.alert.level, msgs: this.sim.radio.messages.filter((m) => m.priority !== 'routine').length };
+    // без сознания командира не будят ни тревоги, ни донесения
+    this.sleeping = { until: this.sim.now + minutes, alert: unconscious ? 9 : this.sim.alert.level, msgs: unconscious ? 1e9 : this.sim.radio.messages.filter((m) => m.priority !== 'routine').length };
     this.ui.fade.classList.add('on');
     this.sim.player.busy = true;
   }
@@ -248,6 +349,11 @@ export class Game implements GameApi {
     const dt = Math.min(0.1, (now - this.last) / 1000);
     this.last = now;
     const sim = this.sim;
+    if (this.lost) return;
+    if (!this.ready) {
+      requestAnimationFrame(this.frame);
+      return;
+    }
     if (this.state === 'playing') {
       if (this.sleeping) {
         for (let i = 0; i < 40 && this.sleeping; i++) {
@@ -259,7 +365,7 @@ export class Game implements GameApi {
           else if (urgent > s.msgs) this.wake('Вас разбудили: срочное донесение.');
           else if (sim.missions.state.ended) this.wake('');
         }
-        if (this.sleeping) this.ui.fade.textContent = `Отдых… ${WorldTimeSystem.clock(sim.now)}`;
+        if (this.sleeping) this.ui.fade.textContent = `${this.sleeping.alert === 9 ? 'Без сознания' : 'Отдых'}… ${WorldTimeSystem.clock(sim.now)}`;
       } else {
         const steps = this.warp;
         const sdt = this.warp > 1 ? Math.min(dt, 0.05) : dt;

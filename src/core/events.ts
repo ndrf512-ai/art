@@ -60,6 +60,7 @@ export interface Events {
   'load:done': { slot: string };
   'vehicle:moved': { id: string };
   'player:hurt': { amount: number };
+  'player:knockout': { hours: number };
   'ui:open': { panel: string; arg?: any };
   'phone:ring': { x: number; z: number };
 }

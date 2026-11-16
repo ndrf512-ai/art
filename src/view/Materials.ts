@@ -76,14 +76,19 @@ export class Materials {
   private indoor = new Map<MatName, THREE.MeshStandardMaterial>();
   readonly tex: Record<string, TexSet> = {};
 
-  constructor() {
+  constructor(readonly cheap = false) {
     this.black1 = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1);
     this.black1.needsUpdate = true;
     this.build();
   }
 
   private std(params: THREE.MeshStandardMaterialParameters, indoorVariant = false): THREE.MeshStandardMaterial {
-    const m = new THREE.MeshStandardMaterial({ roughness: 0.9, metalness: 0, ...params });
+    let m: THREE.MeshStandardMaterial;
+    if (this.cheap) {
+      // на слабых видеочипах: модель Ламберта и без карт нормалей — втрое дешевле на пиксель
+      const { roughness: _r, metalness: _m, normalMap: _n, ...rest } = params;
+      m = new THREE.MeshLambertMaterial(rest as THREE.MeshLambertMaterialParameters) as unknown as THREE.MeshStandardMaterial;
+    } else m = new THREE.MeshStandardMaterial({ roughness: 0.9, metalness: 0, ...params });
     if (indoorVariant) {
       // подавляем небесную подсветку внутри бункера (aoMap действует только на рассеянный свет неба)
       m.aoMap = this.black1;

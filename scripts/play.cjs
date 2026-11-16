@@ -15,6 +15,7 @@ async function boot(query) {
   page.on('pageerror', (e) => logs.push(`[pageerror] ${e.message}\n${e.stack}`));
   await page.goto(`http://localhost:4173/?${query}`);
   await page.waitForFunction(() => window.__game && window.__game.frames > 1, null, { timeout: 240000 });
+  await page.evaluate(() => { try { localStorage.removeItem('granit.settings'); } catch {} });
   // дальше кадры считаем вручную
   await page.evaluate(() => { window.__stop = true; });
   await page.waitForTimeout(300);
@@ -134,6 +135,37 @@ const scenarios = {
     const adj = await h.ev(() => window.__game.sim.npcs.first('adjutant').id);
     await h.ev((id) => window.__game.ui.showDialogue(window.__game.sim.dialogue.open(id)), adj);
     await h.shot('32_phone_dialogue');
+    return h;
+  },
+  async lowq() {
+    const h = await boot('autostart=f&touch=1&q=' + (process.env.Q || 'low'));
+    await h.clickText('Продолжить');
+    await h.sim(14);
+    await h.place(57.5, 64.5, 0, -4);
+    await h.shot('40_low_formation');
+    await h.place(61.8, 15.6, -90, -6);
+    await h.shot('41_low_mirror');
+    console.log(await h.info());
+    return h;
+  },
+  async contextloss() {
+    const h = await boot('');
+    await h.ev(() => localStorage.setItem('granit.settings', JSON.stringify({ quality: 'medium' })));
+    await h.clickText('Новая кампания');
+    await h.clickText('Принять командование');
+    await h.clickText('Продолжить');
+    await h.sim(30);
+    const t = await h.ev(() => window.__game.sim.time.clockString());
+    // имитация сбоя видеочипа
+    await h.ev(() => { window.__stop = false; window.__game.sr.renderer.getContext().getExtension('WEBGL_lose_context').loseContext(); });
+    await h.page.waitForTimeout(500);
+    await h.shot('50_lost');
+    await h.page.waitForNavigation({ timeout: 30000 }).catch(() => {});
+    await h.page.waitForFunction(() => window.__game && window.__game.frames > 2, null, { timeout: 240000 });
+    const r = await h.ev(() => JSON.stringify({ q: window.__game.quality.level, state: window.__game.state, t: window.__game.sim.time.clockString() }));
+    console.log('до сбоя', t, '→ после перезапуска', r);
+    await h.ev(() => { window.__stop = true; });
+    await h.shot('51_after_restore');
     return h;
   },
 };

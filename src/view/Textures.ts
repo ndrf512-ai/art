@@ -46,7 +46,14 @@ function tfbm(u: number, v: number, period: number, octaves: number, seed: numbe
 type PixelFn = (u: number, v: number, x: number, y: number) => [number, number, number, number];
 
 /** Строит карту цвета и (по высоте) карту нормалей. PixelFn возвращает [r, g, b, height]. */
-function build(size: number, fn: PixelFn, normalStrength = 0, repeat = 1): TexSet {
+/** Множитель разрешения процедурных текстур (на слабых телефонах — меньше). */
+let texScale = 1;
+export function setTextureScale(s: number): void {
+  texScale = s;
+}
+
+function build(size0: number, fn: PixelFn, normalStrength = 0, repeat = 1): TexSet {
+  const size = Math.max(64, Math.round(size0 * texScale));
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = size;
   const ctx = canvas.getContext('2d')!;

@@ -10,6 +10,7 @@ import { SHELLS } from '../sim/BallisticsSystem';
 import { fullName, rankName } from '../sim/DocumentSystem';
 import { ITEM_NAMES } from '../sim/ResourceSystem';
 import { SLOT_NAMES, SLOTS } from '../sim/SaveSystem';
+import { QUALITY_NAMES } from '../view/Quality';
 import { TARGET_NAMES } from '../sim/SabotageSystem';
 import { ITEM_WEIGHT, TRUCK_CAPACITY } from '../sim/SupplySystem';
 import { WorldTimeSystem } from '../sim/WorldTimeSystem';
@@ -192,8 +193,8 @@ function systemBody(ui: UIManager, body: HTMLElement, render: () => void): void 
   }
   body.append(h('h3', null, 'Настройки'));
   const s = g.settings;
-  const sel = h('select', { onchange: (e: Event) => ((s.quality = (e.target as HTMLSelectElement).value as any), g.applySettings()) }, ...(['auto', 'low', 'medium', 'high'] as const).map((q) => h('option', { value: q, selected: s.quality === q }, { auto: 'Авто', low: 'Низкое', medium: 'Среднее', high: 'Высокое' }[q])));
-  body.append(h('div', { class: 'row' }, 'Качество графики (после перезапуска): ', sel));
+  const sel = h('select', { onchange: (e: Event) => ((s.quality = (e.target as HTMLSelectElement).value as any), g.applySettings()) }, ...(['auto', 'minimal', 'low', 'medium', 'high'] as const).map((q) => h('option', { value: q, selected: s.quality === q }, QUALITY_NAMES[q])));
+  body.append(h('div', { class: 'row' }, 'Качество графики: ', sel, h('button', { onclick: () => g.restartGraphics() }, 'Применить (перезапуск)')), h('div', { class: 'muted' }, `Сейчас: ${QUALITY_NAMES[g.qualityLevel]}. Видеочип: ${g.gpuName}`));
   body.append(h('div', { class: 'row' }, 'Чувствительность обзора: ', stepper(() => s.sensitivity, (v) => ((s.sensitivity = Math.max(0.3, Math.min(3, Math.round(v * 10) / 10))), g.applySettings()), 0.1, (v) => v.toFixed(1))));
   body.append(h('div', { class: 'row' }, 'Громкость: ', stepper(() => s.volume, (v) => ((s.volume = Math.max(0, Math.min(1, Math.round(v * 10) / 10))), g.applySettings()), 0.1, (v) => Math.round(v * 100) + '%')));
   body.append(h('div', { class: 'row' }, h('button', { class: s.invertY ? 'on' : '', onclick: () => ((s.invertY = !s.invertY), g.applySettings(), render()) }, 'Инверсия вертикали'), h('button', { class: s.autoRes ? 'on' : '', onclick: () => ((s.autoRes = !s.autoRes), g.applySettings(), render()) }, 'Авторазрешение')));

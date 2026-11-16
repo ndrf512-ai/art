@@ -1,5 +1,6 @@
 /** Главное меню, выбор командира, пауза, заставки глав и итог кампании. */
 import { SLOT_NAMES, SLOTS } from '../sim/SaveSystem';
+import { QUALITY_NAMES } from '../view/Quality';
 import type { Gender } from '../sim/Sim';
 import { clear, h } from './dom';
 import type { UIManager } from './UIManager';
@@ -43,6 +44,7 @@ export function showMainMenu(ui: UIManager): void {
         h('button', { onclick: () => chooseCommander() }, 'Новая кампания'),
         h('button', { disabled: !latest, onclick: () => loadMenu() }, 'Загрузить'),
         h('button', { onclick: () => helpMenu() }, 'Управление'),
+        h('button', { onclick: () => graphicsMenu() }, 'Графика'),
         g.touch ? h('button', { onclick: () => g.exitApp() }, 'Выход') : null,
       ),
     );
@@ -70,6 +72,15 @@ export function showMainMenu(ui: UIManager): void {
     }
     btns.append(h('button', { onclick: home }, 'Назад'));
     o.append(h('h1', { style: 'font-size:clamp(18px,5vh,30px)' }, 'ЗАГРУЗИТЬ'), btns);
+  };
+  const graphicsMenu = (): void => {
+    clear(o);
+    const btns = h('div', { class: 'btns' });
+    for (const q of ['auto', 'minimal', 'low', 'medium', 'high'] as const) {
+      btns.append(h('button', { class: g.settings.quality === q ? 'on' : '', onclick: () => ((g.settings.quality = q), g.restartGraphics()) }, QUALITY_NAMES[q]));
+    }
+    btns.append(h('button', { onclick: home }, 'Назад'));
+    o.append(h('h1', { style: 'font-size:clamp(18px,5vh,30px)' }, 'ГРАФИКА'), h('div', { class: 'muted wide', style: 'text-align:center' }, `Сейчас: ${QUALITY_NAMES[g.qualityLevel]}. Видеочип: ${g.gpuName}. Если экран белый или игра вылетает — выберите уровень ниже.`), btns);
   };
   const helpMenu = (): void => {
     clear(o);

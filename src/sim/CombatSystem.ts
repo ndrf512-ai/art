@@ -13,6 +13,13 @@ import type { GoalOption } from './NPCSystem';
 import type { Sim } from './Sim';
 
 const POS_CENTER = { main: { x: 90.5, z: 84.5 }, alt: { x: 30.5, z: 103.5 }, rail: { x: 124.5, z: 84.5 } };
+/** Орудийные дворики, обложенные мешками с песком. */
+const PITS = [
+  { x: 80.5, z: 84.5 },
+  { x: 100.5, z: 84.5 },
+  { x: 22.5, z: 102.5 },
+  { x: 38.5, z: 104.5 },
+];
 
 export class CombatSystem {
   state = {
@@ -24,6 +31,7 @@ export class CombatSystem {
     removeAt: {} as Record<string, number>,
     repelled: 0,
     playerSafe: 0,
+    knockouts: 0,
   };
 
   constructor(private sim: Sim) {
@@ -34,7 +42,7 @@ export class CombatSystem {
   }
 
   reset(): void {
-    this.state = { impacts: [], shellingUntil: 0, intruders: [], infiltration: null, losses: [], removeAt: {}, repelled: 0, playerSafe: 0 };
+    this.state = { impacts: [], shellingUntil: 0, intruders: [], infiltration: null, losses: [], removeAt: {}, repelled: 0, playerSafe: 0, knockouts: 0 };
   }
 
   get underFire(): boolean {
@@ -77,13 +85,15 @@ export class CombatSystem {
       if (sim.grid.indoorAt(n.x, n.z)) continue;
       const d = dist(n.x, n.z, x, z);
       if (d > R) continue;
-      const cover = n.anim === 'cover' ? 0.5 : 1;
-      if (d < 4 * size) {
-        if (rng.chance(0.75 * cover)) this.kill(n, 'погиб при обстреле');
-        else this.wound(n, rng.range(40, 70), 'тяжело ранен при обстреле');
-      } else if (d < 9 * size) {
-        if (rng.chance(0.4 * cover)) this.wound(n, rng.range(30, 60), 'ранен осколком');
-      } else if (rng.chance(0.15 * cover)) this.wound(n, rng.range(15, 35), 'легко ранен осколком');
+      // лёжа и в обвалованном орудийном дворике от осколков защищены куда лучше
+      const inPit = PITS.some((p) => dist(n.x, n.z, p.x, p.z) < 5.4) && dist(x, z, n.x, n.z) > 2;
+      const cover = (n.anim === 'cover' || n.anim === 'kneel_aim' ? 0.45 : 1) * (inPit ? 0.35 : 1);
+      if (d < 3.5 * size) {
+        if (rng.chance(0.5 * cover)) this.kill(n, 'погиб при обстреле');
+        else if (rng.chance(0.8)) this.wound(n, rng.range(40, 70), 'тяжело ранен при обстреле');
+      } else if (d < 8 * size) {
+        if (rng.chance(0.3 * cover)) this.wound(n, rng.range(30, 58), 'ранен осколком');
+      } else if (rng.chance(0.1 * cover)) this.wound(n, rng.range(15, 35), 'легко ранен осколком');
     }
     for (const g of sim.artillery.guns()) {
       const d = dist(g.x, g.z, x, z);
@@ -111,11 +121,24 @@ export class CombatSystem {
   }
 
   hurtPlayer(dmg: number): void {
-    const p = this.sim.player;
+    const sim = this.sim;
+    const p = sim.player;
     p.health = Math.max(0, p.health - dmg);
-    this.state.playerSafe = this.sim.clock + 8;
-    this.sim.bus.emit('player:hurt', { amount: dmg });
-    if (p.health <= 0) this.sim.missions.end('wounded');
+    this.state.playerSafe = sim.clock + 8;
+    sim.bus.emit('player:hurt', { amount: dmg });
+    if (p.health > 0) return;
+    // командира без сознания уносят в медпункт; на несколько часов объект остаётся на начальнике штаба
+    this.state.knockouts = (this.state.knockouts ?? 0) + 1;
+    if (this.state.knockouts >= 3) return sim.missions.end('wounded');
+    const bed = sim.layout.byTag('med_bed')[0];
+    p.x = bed.x;
+    p.z = bed.z;
+    p.zone = sim.grid.zoneAt(p.x, p.z);
+    p.indoor = true;
+    p.health = 45;
+    sim.relations.event('casualty');
+    sim.bus.emit('player:knockout', { hours: 5 });
+    sim.radio.send('Медпункт', 'Командир ранен', `Командир получил ранение и без сознания доставлен в медпункт. Обязанности временно исполнял начальник штаба. ${this.state.knockouts === 2 ? 'Врач предупреждает: следующее ранение — эвакуация в тыл.' : ''}`, 'routine', 'knockout', undefined, false);
   }
 
   // ------------------------------------------------------------------ ранения и потери

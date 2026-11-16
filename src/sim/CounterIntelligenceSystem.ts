@@ -357,11 +357,16 @@ export class CounterIntelligenceSystem {
       c.status = 'cleared';
       return;
     }
-    const s = this.score(c.suspect);
     const guilty = sim.spy.isSpy(c.suspect);
     const ci = sim.npcs.first('ci_officer');
     const from = ci ? `Контрразведка (${fullName(ci)})` : 'Контрразведка';
-    if (guilty && (s >= 6 || sim.rng.chance(0.18 + s * 0.09))) {
+    // при следствии документы арестованного изучают эксперты абвера
+    const fake = sim.docs.discrepancies(n).filter((k) => (sim.docs.state.flaws[n.id] ?? []).includes(k));
+    if (fake.length && !this.evidenceFor(n.id).some((e) => e.text.startsWith('Экспертиза'))) {
+      this.addEvidence(n.id, 'doc', `Экспертиза документов: подделка (${fake.map((k) => FLAW_TEXT[k]).join('; ')})`, from, 4);
+    }
+    const s = this.score(c.suspect);
+    if (guilty && (s >= 5 || sim.rng.chance(0.18 + s * 0.09))) {
       c.status = 'convicted';
       this.state.convicted.push(n.id);
       c.notes.push(`${sim.time.stamp()}: сознался. Агент противника.`);

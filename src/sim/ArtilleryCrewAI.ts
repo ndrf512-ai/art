@@ -94,6 +94,7 @@ export class ArtilleryCrewAI {
   animFor(n: NpcState, id: GunId, slot: number): AnimId {
     const g = this.sim.artillery.gun(id);
     const acting = this.commander(g)?.id === n.id;
+    if (this.sim.combat.underFire && g.phase !== 'firing' && g.phase !== 'ready') return 'cover';
     switch (g.phase) {
       case 'computing':
         return acting ? 'write' : slot === 1 ? 'inspect' : 'attention';

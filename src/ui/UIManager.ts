@@ -36,6 +36,9 @@ export interface GameApi {
   sleep(minutes: number): void;
   toMenu(): void;
   applySettings(): void;
+  restartGraphics(): void;
+  readonly qualityLevel: import('../view/Quality').QualityLevel;
+  readonly gpuName: string;
   exitApp(): void;
   fps(): number;
 }

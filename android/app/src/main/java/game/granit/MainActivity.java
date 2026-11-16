@@ -11,6 +11,7 @@ import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import android.webkit.ConsoleMessage;
+import android.webkit.RenderProcessGoneDetail;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
@@ -90,6 +91,7 @@ public class MainActivity extends Activity {
 
     /** Системная кнопка «Назад»: сначала закрываем панели игры, затем сворачиваем приложение. */
     private void handleBack() {
+        if (web == null) return;
         web.evaluateJavascript("(window.__granitBack ? window.__granitBack() : false)", value -> {
             if (!"true".equals(value)) moveTaskToBack(true);
         });
@@ -110,22 +112,26 @@ public class MainActivity extends Activity {
     @Override
     protected void onPause() {
         // игра сама делает автосохранение и глушит звук
-        web.evaluateJavascript("window.__granitPause && window.__granitPause()", null);
-        web.onPause();
+        if (web != null) {
+            web.evaluateJavascript("window.__granitPause && window.__granitPause()", null);
+            web.onPause();
+        }
         super.onPause();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        web.onResume();
-        web.evaluateJavascript("window.__granitResume && window.__granitResume()", null);
+        if (web != null) {
+            web.onResume();
+            web.evaluateJavascript("window.__granitResume && window.__granitResume()", null);
+        }
         hideSystemUi();
     }
 
     @Override
     protected void onDestroy() {
-        web.destroy();
+        if (web != null) web.destroy();
         super.onDestroy();
     }
 
@@ -207,6 +213,18 @@ public class MainActivity extends Activity {
         @Override
         public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
             return !HOST.equals(request.getUrl().getHost());
+        }
+
+        /** Процесс отрисовки WebView упал (нехватка памяти): пересоздаём экран, а не роняем приложение. */
+        @Override
+        public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+            Log.w(TAG, "Процесс отрисовки завершён, перезапуск");
+            if (view == web) {
+                web.destroy();
+                web = null;
+                recreate();
+            }
+            return true;
         }
     }
 

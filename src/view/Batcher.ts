@@ -91,13 +91,19 @@ export class Batcher {
     const out: THREE.Mesh[] = [];
     for (const [mat, list] of this.groups) {
       if (list.length === 0) continue;
+      // все примитивы индексированы: сливаем с индексами, без размножения вершин
       const norm = list.map((g) => {
-        const gi = g.index ? g : g.toNonIndexed();
-        // оставляем только общие атрибуты
+        let gi = g;
+        if (!gi.index) {
+          const n = gi.attributes.position.count;
+          const idx = new Array(n);
+          for (let i = 0; i < n; i++) idx[i] = i;
+          gi.setIndex(idx);
+        }
         for (const name of Object.keys(gi.attributes)) {
           if (name !== 'position' && name !== 'normal' && name !== 'uv') gi.deleteAttribute(name);
         }
-        return gi.index ? gi.toNonIndexed() : gi;
+        return gi;
       });
       const merged = mergeGeometries(norm, false);
       if (!merged) continue;
