@@ -123,6 +123,8 @@ export function fireOrMapPanel(ui: UIManager, body: HTMLElement, arg: MapArg): P
     // высоты
     c.fillStyle = '#7a4a22';
     for (const p of HEIGHTS) {
+      // высоты с наблюдательными пунктами подписаны у самого НП
+      if (OPS.some((o) => Math.hypot(o.x - p.x, o.y - p.y) < 400)) continue;
       const [x, y] = S(p.x, p.y);
       c.beginPath();
       c.moveTo(x, y - 5);
@@ -345,7 +347,12 @@ export function fireOrMapPanel(ui: UIManager, body: HTMLElement, arg: MapArg): P
       sel.ty = Math.round(wy / 10) * 10;
       sel.has = true;
     }
-    renderSide();
+    renderTarget();
+    if (fire) {
+      renderCalc();
+      updateOrder();
+    }
+    updateIntel();
     draw();
   }
 
@@ -362,43 +369,140 @@ export function fireOrMapPanel(ui: UIManager, body: HTMLElement, arg: MapArg): P
   }
 
   // ---- боковая панель
-  function renderSide(): void {
-    clear(side);
-    if (sel.has) {
-      const rep = sim.recon.byId(sel.intel);
-      side.append(h('h3', null, 'Цель'));
-      if (rep) {
-        side.append(h('div', null, h('b', null, `${ENEMY_TYPE_NAMES[rep.type]}`), ` — ${rep.sourceName}, надёжность ${rep.grade}`), h('div', { class: 'pre' }, rep.text), h('div', { class: 'muted' }, `Получено ${WorldTimeSystem.clock(rep.t)}, сведения на ${WorldTimeSystem.clock(rep.seenT)} (${Math.round(sim.now - rep.seenT)} мин назад), погрешность ±${rep.err} м.${rep.struck ? ' По цели уже вёлся огонь.' : ''}`));
-      } else side.append(h('div', null, `${describePlace(sel.tx, sel.ty)}`));
-      side.append(h('div', null, `X ${sel.tx}  Y ${sel.ty}`));
-      if (fire) side.append(h('div', { class: 'row' }, 'X: ', stepper(() => sel.tx, (v) => ((sel.tx = v), (sel.intel = null), draw(), renderCalc()), 10, String, 100), ' Y: ', stepper(() => sel.ty, (v) => ((sel.ty = v), (sel.intel = null), draw(), renderCalc()), 10, String, 100)));
-    } else side.append(h('div', { class: 'muted' }, fire ? 'Укажите цель: коснитесь донесения разведки или любой точки карты.' : 'Коснитесь значка донесения, чтобы прочитать его. Красные значки — сведения разведки: буква — надёжность (A–D), рядом — давность.'));
+  // Разделы строятся один раз; при обновлении меняются только тексты и состояния кнопок,
+  // поэтому прокрутка и нажатия на телефоне не сбиваются, пока идут доклады с батареи.
+  const secTarget = h('div');
+  const secGuns = h('div');
+  const secOrder = h('div');
+  const secMissions = h('div');
+  const secCorr = h('div');
+  const secIntel = h('div');
+  side.append(secTarget);
+  if (fire) side.append(secGuns, secOrder, secMissions, secCorr);
+  side.append(secIntel);
 
-    if (fire) renderFire();
-    // список донесений
-    side.append(h('h3', null, 'Донесения разведки'));
-    const list = h('div', { class: 'list' });
-    const reps = sim.recon.current().slice(0, 14);
-    if (!reps.length) list.append(h('div', { class: 'muted' }, 'Свежих донесений нет.'));
-    for (const rep of reps) {
-      const age = Math.round(sim.now - rep.seenT);
-      list.append(
-        h('div', {
-          class: 'item' + (sel.intel === rep.id ? ' sel' : ''),
-          onclick: () => {
-            selectReport(rep);
-            view.cx = rep.x;
-            view.cy = rep.y;
-            renderSide();
-            draw();
-          },
-        }, h('b', null, `${ENEMY_TYPE_NAMES[rep.type]} · ${square(rep.x, rep.y)}`), h('small', null, `${SOURCE_SHORT[rep.source]} · ${rep.grade} · ${age < 60 ? age + ' мин' : (age / 60).toFixed(1) + ' ч'} назад${rep.struck ? ' · обстреляна' : ''}`)),
-      );
+  function renderSide(): void {
+    renderTarget();
+    if (fire) {
+      buildGuns();
+      buildOrder();
+      updateMissions();
+      buildCorr();
     }
-    side.append(list);
+    updateIntel();
   }
 
+  function renderTarget(): void {
+    clear(secTarget);
+    if (sel.has) {
+      const rep = sim.recon.byId(sel.intel);
+      secTarget.append(h('h3', null, 'Цель'));
+      if (rep) {
+        secTarget.append(h('div', null, h('b', null, `${ENEMY_TYPE_NAMES[rep.type]}`), ` — ${rep.sourceName}, надёжность ${rep.grade}`), h('div', { class: 'pre' }, rep.text), h('div', { class: 'muted' }, `Получено ${WorldTimeSystem.clock(rep.t)}, сведения на ${WorldTimeSystem.clock(rep.seenT)} (${Math.round(sim.now - rep.seenT)} мин назад), погрешность ±${rep.err} м.${rep.struck ? ' По цели уже вёлся огонь.' : ''}`));
+      } else secTarget.append(h('div', null, `${describePlace(sel.tx, sel.ty)}`));
+      const coord = h('div', null, `X ${sel.tx}  Y ${sel.ty}`);
+      secTarget.append(coord);
+      if (fire) {
+        const upd = (): void => {
+          coord.textContent = `X ${sel.tx}  Y ${sel.ty}`;
+          sel.intel = null;
+          draw();
+          renderCalc();
+        };
+        secTarget.append(h('div', { class: 'row' }, 'X: ', stepper(() => sel.tx, (v) => ((sel.tx = v), upd()), 10, String, 100), ' Y: ', stepper(() => sel.ty, (v) => ((sel.ty = v), upd()), 10, String, 100)));
+      }
+    } else secTarget.append(h('div', { class: 'muted' }, fire ? 'Укажите цель: коснитесь донесения разведки или любой точки карты.' : 'Коснитесь значка донесения, чтобы прочитать его. Красные значки — сведения разведки: буква — надёжность (A–D), рядом — давность.'));
+  }
+
+  // ---- орудия
+  const gunUi = new Map<GunId, { btn: HTMLButtonElement; info: HTMLSpanElement }>();
+  function gunInfo(id: GunId): [string, boolean] {
+    const art = sim.artillery;
+    const g = art.gun(id);
+    const why = art.availability(id);
+    if (why) return [why, true];
+    const where = id === 'gun1' ? (g.deploy >= 1 ? ', на позиции' : g.deploy <= 0 ? ', в ангаре' : ', в движении') : g.atAlt ? ', запасная поз.' : '';
+    const niche = Object.entries(g.niche).filter(([, n]) => (n ?? 0) > 0).map(([s, n]) => `${SHELLS[s as ShellId].short} ${n}`).join(', ') || 'снарядов нет';
+    return [`${sim.crewAI.phaseName(g.phase).toLowerCase()}${where}; на позиции ${niche}`, false];
+  }
+  function buildGuns(): void {
+    if (gunUi.size) return updateGuns();
+    secGuns.append(h('h3', null, 'Орудия'));
+    for (const id of GUN_IDS) {
+      const btn = h('button', {
+        onclick: () => {
+          sel.guns.has(id) ? sel.guns.delete(id) : sel.guns.add(id);
+          // боеприпас должен подходить назначенным орудиям
+          const kinds = new Set([...sel.guns].map((x) => sim.layout.guns[x].kind));
+          if (!kinds.has(SHELLS[sel.shell].gun)) sel.shell = kinds.has('rail') ? 'he38' : 'he21';
+          updateGuns();
+          buildOrder();
+        },
+      }, id === 'gun1' ? '«Конрад»' : '№' + id.slice(3));
+      const info = h('span');
+      gunUi.set(id, { btn, info });
+      secGuns.append(h('div', { class: 'row' }, btn, info));
+    }
+    updateGuns();
+  }
+  function updateGuns(): void {
+    for (const [id, u] of gunUi) {
+      const [text, bad] = gunInfo(id);
+      if (u.info.textContent !== text) u.info.textContent = text;
+      u.info.className = bad ? 'bad' : 'muted';
+      u.btn.disabled = bad && !sel.guns.has(id);
+      u.btn.classList.toggle('on', sel.guns.has(id));
+    }
+  }
+
+  // ---- приказ
+  let fireBtn: HTMLButtonElement | null = null;
   const calc = h('div', { class: 'pre' });
+  function buildOrder(): void {
+    const art = sim.artillery;
+    clear(secOrder);
+    const kinds = new Set([...sel.guns].map((x) => sim.layout.guns[x].kind));
+    const shells = (Object.keys(SHELLS) as ShellId[]).filter((s) => kinds.has(SHELLS[s].gun));
+    secOrder.append(
+      h('h3', null, 'Приказ'),
+      h('div', { class: 'row' }, 'Вид огня: ', h('select', { onchange: (e: Event) => ((sel.kind = (e.target as HTMLSelectElement).value as FireKind), buildOrder()) }, ...(Object.keys(FIRE_KIND_NAMES) as FireKind[]).map((k) => h('option', { value: k, selected: sel.kind === k }, FIRE_KIND_NAMES[k])))),
+      h('div', { class: 'row' }, 'Боеприпас: ', h('select', { onchange: (e: Event) => ((sel.shell = (e.target as HTMLSelectElement).value as ShellId), renderCalc()) }, ...shells.map((s) => h('option', { value: s, selected: sel.shell === s }, `${SHELLS[s].name} (на складе ${sim.resources.ammo(s)})`)))),
+    );
+    if (sel.kind !== 'single') secOrder.append(h('div', { class: 'row' }, sel.kind === 'suppress' ? 'Длительность, мин: ' : 'Выстрелов всего: ', stepper(() => sel.rounds, (v) => (sel.rounds = Math.max(1, Math.min(sel.kind === 'suppress' ? 90 : 24, v))), sel.kind === 'suppress' ? 10 : 1)));
+    secOrder.append(calc);
+    renderCalc();
+    fireBtn = h('button', {
+      class: 'primary',
+      onclick: () => {
+        if (!sel.has || !sel.guns.size) {
+          ui.note(!sel.has ? 'Сначала укажите цель на карте или в списке донесений.' : 'Назначьте хотя бы одно орудие.', 'warn');
+          return;
+        }
+        const res = art.order({ kind: sel.kind, guns: [...sel.guns], tx: sel.tx, ty: sel.ty, targetName: targetName(), intelId: sel.intel, shell: sel.shell, rounds: sel.kind === 'suppress' ? 99 : sel.rounds, minutes: sel.rounds });
+        if (typeof res === 'string') {
+          ui.note(res, 'warn');
+          return;
+        }
+        const bc = sim.npcs.first('battery_cmd') ?? null;
+        sim.command.issue('fire', bc, `${FIRE_KIND_NAMES[sel.kind]}: ${targetName()}`, { mission: res.id });
+        ui.note(`Приказ передан: ${FIRE_KIND_NAMES[sel.kind].toLowerCase()} — ${targetName()}.`, 'order');
+        if (!sim.resources.state.wire) ui.note('Телефонной связи нет: приказ на батарею понёс посыльный, подготовка займёт больше времени.', 'warn');
+        sel.mission = res.id;
+        sel.dR = sel.dAz = 0;
+        updateGuns();
+        updateMissions();
+        buildCorr();
+      },
+    }, 'Открыть огонь');
+    // кнопки приказа закреплены внизу панели — не нужно прокручивать к ним на телефоне
+    secOrder.append(h('div', { class: 'row fire-actions' }, fireBtn, h('button', { class: 'danger', onclick: () => (art.ceaseFire(), updateGuns(), updateMissions(), buildCorr()) }, 'Стой! Прекратить огонь')));
+    updateOrder();
+  }
+  function updateOrder(): void {
+    // кнопка остаётся нажимаемой: без цели или орудий объясняем, чего не хватает
+    if (fireBtn) fireBtn.classList.toggle('dim', !sel.has || !sel.guns.size);
+  }
+
   function renderCalc(): void {
     clear(calc);
     if (!sel.has) return;
@@ -416,92 +520,127 @@ export function fireOrMapPanel(ui: UIManager, body: HTMLElement, arg: MapArg): P
     calc.append(h('span', { class: p.ok ? '' : 'bad' }, lines.join('\n')));
   }
 
-  function renderFire(): void {
-    const art = sim.artillery;
-    side.append(h('h3', null, 'Орудия'));
-    for (const id of GUN_IDS) {
-      const g = art.gun(id);
-      const why = art.availability(id);
-      const on = sel.guns.has(id);
-      side.append(
-        h('div', { class: 'row' },
-          h('button', {
-            class: on ? 'on' : '',
-            disabled: !!why,
-            onclick: () => {
-              on ? sel.guns.delete(id) : sel.guns.add(id);
-              // боеприпас должен подходить назначенным орудиям
-              const kinds = new Set([...sel.guns].map((x) => sim.layout.guns[x].kind));
-              if (!kinds.has(SHELLS[sel.shell].gun)) sel.shell = kinds.has('rail') ? 'he38' : 'he21';
-              renderSide();
-            },
-          }, id === 'gun1' ? '«Конрад»' : '№' + id.slice(3)),
-          h('span', { class: why ? 'bad' : 'muted' }, why ?? `${sim.crewAI.phaseName(g.phase).toLowerCase()}${id === 'gun1' ? (g.deploy >= 1 ? ', на позиции' : g.deploy <= 0 ? ', в ангаре' : ', в движении') : g.atAlt ? ', запасная поз.' : ''}; на позиции ${Object.entries(g.niche).filter(([, n]) => (n ?? 0) > 0).map(([s, n]) => `${SHELLS[s as ShellId].short} ${n}`).join(', ') || 'снарядов нет'}`),
-        ),
-      );
-    }
-    const kinds = new Set([...sel.guns].map((x) => sim.layout.guns[x].kind));
-    const shells = (Object.keys(SHELLS) as ShellId[]).filter((s) => kinds.has(SHELLS[s].gun));
-    side.append(
-      h('h3', null, 'Приказ'),
-      h('div', { class: 'row' }, 'Вид огня: ', h('select', { onchange: (e: Event) => ((sel.kind = (e.target as HTMLSelectElement).value as FireKind), renderSide()) }, ...(Object.keys(FIRE_KIND_NAMES) as FireKind[]).map((k) => h('option', { value: k, selected: sel.kind === k }, FIRE_KIND_NAMES[k])))),
-      h('div', { class: 'row' }, 'Боеприпас: ', h('select', { onchange: (e: Event) => ((sel.shell = (e.target as HTMLSelectElement).value as ShellId), renderCalc()) }, ...shells.map((s) => h('option', { value: s, selected: sel.shell === s }, `${SHELLS[s].name} (на складе ${sim.resources.ammo(s)})`)))),
-    );
-    if (sel.kind !== 'single') side.append(h('div', { class: 'row' }, sel.kind === 'suppress' ? 'Длительность, мин: ' : 'Выстрелов всего: ', stepper(() => sel.rounds, (v) => (sel.rounds = Math.max(1, Math.min(sel.kind === 'suppress' ? 90 : 24, v))), sel.kind === 'suppress' ? 10 : 1)));
-    side.append(calc);
-    renderCalc();
-    side.append(
-      h('div', { class: 'row' },
-        h('button', {
-          class: 'primary',
-          disabled: !sel.has || !sel.guns.size,
-          onclick: () => {
-            const res = art.order({ kind: sel.kind, guns: [...sel.guns], tx: sel.tx, ty: sel.ty, targetName: targetName(), intelId: sel.intel, shell: sel.shell, rounds: sel.kind === 'suppress' ? 99 : sel.rounds, minutes: sel.rounds });
-            if (typeof res === 'string') {
-              ui.note(res, 'warn');
-              return;
-            }
-            const bc = sim.npcs.first('battery_cmd') ?? null;
-            sim.command.issue('fire', bc, `${FIRE_KIND_NAMES[sel.kind]}: ${targetName()}`, { mission: res.id });
-            if (!sim.resources.state.wire) ui.note('Телефонной связи нет: приказ на батарею понёс посыльный, подготовка займёт больше времени.', 'warn');
-            sel.mission = res.id;
-            sel.dR = sel.dAz = 0;
-            renderSide();
-          },
-        }, 'Открыть огонь'),
-        h('button', { class: 'danger', onclick: () => (art.ceaseFire(), renderSide()) }, 'Стой! Прекратить огонь'),
-      ),
-    );
-    // задачи и поправки
-    const ms = [...art.state.missions].reverse().slice(0, 4);
-    if (ms.length) side.append(h('h3', null, 'Огневые задачи и доклады'));
-    for (const m of ms) {
-      const active = m.status === 'active';
-      const cur = sel.mission === m.id;
-      const item = h('div', { class: 'item' + (cur ? ' sel' : ''), onclick: () => ((sel.mission = m.id), (sel.dR = sel.dAz = 0), renderSide()) }, h('b', null, `${m.targetName} — ${SHELLS[m.shell].short} ${m.fired}/${m.kind === 'suppress' ? '…' : m.rounds}`), h('small', null, `${active ? 'выполняется' : m.status === 'done' ? 'выполнена' : 'отменена'}; введённые поправки: дальность ${m.corrRange >= 0 ? '+' : ''}${m.corrRange} м, угломер ${m.corrAz >= 0 ? '+' : ''}${m.corrAz}`), h('div', { class: 'pre' }, m.reports.slice(-4).join('\n')));
-      side.append(item);
-      if (cur) {
-        const range = Math.hypot(m.tx - COMPLEX_POS.x, m.ty - COMPLEX_POS.y);
-        const perMil = (range * 2 * Math.PI) / 6000;
-        side.append(
-          h('div', { class: 'row' }, 'Дальность, м: ', stepper(() => sel.dR, (v) => (sel.dR = v), 50, (v) => (v > 0 ? '+' + v + ' дальше' : v < 0 ? v + ' ближе' : '0'))),
-          h('div', { class: 'row' }, 'Угломер, дел.: ', stepper(() => sel.dAz, (v) => (sel.dAz = v), 1, (v) => (v === 0 ? '0' : `${v > 0 ? 'правее' : 'левее'} ${Math.abs(v)} (≈${Math.round(Math.abs(v) * perMil)} м)`), 5)),
-          h('div', { class: 'muted' }, 'Разрыв с недолётом — добавьте дальность; разрыв правее цели — поправка «левее».'),
-          h('div', { class: 'row' },
-            h('button', {
-              onclick: () => {
-                art.correct(m.id, sel.dR, sel.dAz);
-                sim.missions.flag('corrected', true);
-                if (!active) art.repeat(m.id, 1);
-                sel.dR = sel.dAz = 0;
-                renderSide();
-              },
-            }, active ? 'Передать поправку' : 'Поправка и ещё выстрел'),
-            h('button', { onclick: () => (art.repeat(m.id, 4), renderSide()) }, 'Серия: ещё 4 на орудие'),
-          ),
-        );
+  // ---- огневые задачи и доклады: элементы обновляются на месте
+  const missionUi = new Map<string, { el: HTMLElement; title: HTMLElement; small: HTMLElement; pre: HTMLElement; sig: string }>();
+  const missionHead = h('h3', null, 'Огневые задачи и доклады');
+  const missionList = h('div', { class: 'list' });
+  secMissions.append(missionHead, missionList);
+  function updateMissions(): void {
+    const ms = [...sim.artillery.state.missions].reverse().slice(0, 4);
+    missionHead.style.display = ms.length ? '' : 'none';
+    const keep = new Set(ms.map((m) => m.id));
+    for (const [id, u] of missionUi) {
+      if (!keep.has(id)) {
+        u.el.remove();
+        missionUi.delete(id);
       }
     }
+    ms.forEach((m, i) => {
+      let u = missionUi.get(m.id);
+      if (!u) {
+        const title = h('b');
+        const small = h('small');
+        const pre = h('div', { class: 'pre' });
+        const el = h('div', { class: 'item', onclick: () => ((sel.mission = m.id), (sel.dR = sel.dAz = 0), updateMissions(), buildCorr()) }, title, small, pre);
+        u = { el, title, small, pre, sig: '' };
+        missionUi.set(m.id, u);
+      }
+      if (missionList.children[i] !== u.el) missionList.insertBefore(u.el, missionList.children[i] ?? null);
+      const sig = `${m.status}|${m.fired}|${m.reports.length}|${m.corrRange}|${m.corrAz}`;
+      if (sig !== u.sig) {
+        u.sig = sig;
+        u.title.textContent = `${m.targetName} — ${SHELLS[m.shell].short} ${m.fired}/${m.kind === 'suppress' ? '…' : m.rounds}`;
+        u.small.textContent = `${m.status === 'active' ? 'выполняется' : m.status === 'done' ? 'выполнена' : 'отменена'}; введённые поправки: дальность ${m.corrRange >= 0 ? '+' : ''}${m.corrRange} м, угломер ${m.corrAz >= 0 ? '+' : ''}${m.corrAz}`;
+        u.pre.textContent = m.reports.slice(-4).join('\n');
+      }
+      u.el.classList.toggle('sel', sel.mission === m.id);
+    });
+  }
+
+  // ---- поправки к выбранной задаче
+  let corrBtn: HTMLButtonElement | null = null;
+  let corrFor: string | null = null;
+  function buildCorr(): void {
+    const m = sim.artillery.mission(sel.mission);
+    corrFor = m?.id ?? null;
+    clear(secCorr);
+    corrBtn = null;
+    if (!m) return;
+    const art = sim.artillery;
+    const range = Math.hypot(m.tx - COMPLEX_POS.x, m.ty - COMPLEX_POS.y);
+    const perMil = (range * 2 * Math.PI) / 6000;
+    corrBtn = h('button', {
+      onclick: () => {
+        const active = m.status === 'active';
+        art.correct(m.id, sel.dR, sel.dAz);
+        sim.missions.flag('corrected', true);
+        if (!active) art.repeat(m.id, 1);
+        ui.note(`Поправка передана: дальность ${sel.dR >= 0 ? '+' : ''}${sel.dR} м, угломер ${sel.dAz >= 0 ? '+' : ''}${sel.dAz}.`, 'order');
+        sel.dR = sel.dAz = 0;
+        updateGuns();
+        updateMissions();
+        buildCorr();
+      },
+    });
+    secCorr.append(
+      h('h3', null, `Поправки: ${m.targetName}`),
+      h('div', { class: 'row' }, 'Дальность, м: ', stepper(() => sel.dR, (v) => (sel.dR = v), 50, (v) => (v > 0 ? '+' + v + ' дальше' : v < 0 ? v + ' ближе' : '0'))),
+      h('div', { class: 'row' }, 'Угломер, дел.: ', stepper(() => sel.dAz, (v) => (sel.dAz = v), 1, (v) => (v === 0 ? '0' : `${v > 0 ? 'правее' : 'левее'} ${Math.abs(v)} (≈${Math.round(Math.abs(v) * perMil)} м)`), 5)),
+      h('div', { class: 'muted' }, 'Разрыв с недолётом — добавьте дальность; разрыв правее цели — поправка «левее».'),
+      h('div', { class: 'row' }, corrBtn, h('button', { onclick: () => (art.repeat(m.id, 4), ui.note('Приказ: серия, ещё 4 выстрела на орудие.', 'order'), updateGuns(), updateMissions(), updateCorr()) }, 'Серия: ещё 4 на орудие')),
+    );
+    updateCorr();
+  }
+  function updateCorr(): void {
+    const m = sim.artillery.mission(corrFor);
+    if (corrBtn && m) {
+      const text = m.status === 'active' ? 'Передать поправку' : 'Поправка и ещё выстрел';
+      if (corrBtn.textContent !== text) corrBtn.textContent = text;
+    }
+  }
+
+  // ---- донесения разведки: элементы по идентификаторам, без пересоздания
+  const intelUi = new Map<string, { el: HTMLElement; small: HTMLElement }>();
+  const intelHead = h('h3', null, 'Донесения разведки');
+  const intelEmpty = h('div', { class: 'muted' }, 'Свежих донесений нет.');
+  const intelList = h('div', { class: 'list' });
+  secIntel.append(intelHead, intelEmpty, intelList);
+  function updateIntel(): void {
+    const reps = sim.recon.current().slice(0, 14);
+    intelEmpty.style.display = reps.length ? 'none' : '';
+    const keep = new Set(reps.map((r) => r.id));
+    for (const [id, u] of intelUi) {
+      if (!keep.has(id)) {
+        u.el.remove();
+        intelUi.delete(id);
+      }
+    }
+    reps.forEach((rep, i) => {
+      let u = intelUi.get(rep.id);
+      if (!u) {
+        const small = h('small');
+        const el = h('div', {
+          class: 'item',
+          onclick: () => {
+            selectReport(rep);
+            view.cx = rep.x;
+            view.cy = rep.y;
+            renderTarget();
+            renderCalc();
+            updateOrder();
+            updateIntel();
+            draw();
+          },
+        }, h('b', null, `${ENEMY_TYPE_NAMES[rep.type]} · ${square(rep.x, rep.y)}`), small);
+        u = { el, small };
+        intelUi.set(rep.id, u);
+      }
+      if (intelList.children[i] !== u.el) intelList.insertBefore(u.el, intelList.children[i] ?? null);
+      const age = Math.round(sim.now - rep.seenT);
+      const text = `${SOURCE_SHORT[rep.source]} · ${rep.grade} · ${age < 60 ? age + ' мин' : (age / 60).toFixed(1) + ' ч'} назад${rep.struck ? ' · обстреляна' : ''}`;
+      if (u.small.textContent !== text) u.small.textContent = text;
+      u.el.classList.toggle('sel', sel.intel === rep.id);
+    });
   }
 
   renderSide();
@@ -512,12 +651,13 @@ export function fireOrMapPanel(ui: UIManager, body: HTMLElement, arg: MapArg): P
     title: fire ? 'Планшет управления огнём' : 'Карта района',
     refresh: () => {
       draw();
-      // доклады и состояния орудий обновляются, пока пользователь не правит поля
-      if (fire && !(document.activeElement instanceof HTMLSelectElement)) {
-        const top = side.scrollTop;
-        renderSide();
-        side.scrollTop = top;
+      // только тексты и состояния: элементы под пальцем не пересоздаются
+      if (fire) {
+        updateGuns();
+        updateMissions();
+        updateCorr();
       }
+      updateIntel();
     },
     dispose: () => window.removeEventListener('resize', onResize),
   };

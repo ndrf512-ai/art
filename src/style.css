@@ -25,6 +25,9 @@ body { font-family: 'Courier New', 'DejaVu Sans Mono', 'Liberation Mono', monosp
 button { font: inherit; color: var(--ink); background: rgba(46, 52, 38, 0.9); border: 1px solid var(--line); padding: 0.45em 0.8em; cursor: pointer; pointer-events: auto; text-transform: uppercase; letter-spacing: 0.04em; border-radius: 2px; }
 button:active { background: rgba(90, 98, 70, 0.95); }
 button:disabled { opacity: 0.38; cursor: default; }
+button.dim { opacity: 0.55; }
+.fire-actions { position: sticky; bottom: 0; z-index: 2; background: var(--bg2); padding: 6px 0; margin: 4px 0 0; border-top: 1px solid var(--line); }
+button { min-height: 2.4em; touch-action: manipulation; }
 button.primary { border-color: var(--amber); color: var(--amber); }
 button.danger { border-color: var(--red); color: #e58a7e; }
 button.on { background: rgba(120, 100, 40, 0.9); border-color: var(--amber); }

@@ -14,7 +14,7 @@ import { QUALITY_NAMES } from '../view/Quality';
 import { TARGET_NAMES } from '../sim/SabotageSystem';
 import { ITEM_WEIGHT, TRUCK_CAPACITY } from '../sim/SupplySystem';
 import { WorldTimeSystem } from '../sim/WorldTimeSystem';
-import { bar, clear, h, stepper } from './dom';
+import { bar, clear, h, softRefresh, stepper } from './dom';
 import type { UIManager } from './UIManager';
 
 export interface PanelResult {
@@ -53,22 +53,28 @@ const journal: PanelFn = (ui, body, arg, extra) => {
     ['guard', 'Караул'],
     ['system', 'Система'],
   ];
-  const render = (): void => {
+  const renderTabs = (): void => {
     clear(extra);
     for (const [id, name] of tabs) {
       extra.append(h('button', { class: tab === id ? 'on' : '', onclick: () => ((tab = id), render()) }, name));
     }
+  };
+  const render = (): void => {
+    renderTabs();
     clear(body);
+    fill(body);
+  };
+  const fill = (t: HTMLElement): void => {
     if (tab === 'objectives') {
       const m = sim.missions;
-      body.append(h('h3', null, m.state.title || 'Кампания'));
-      for (const o of m.visible()) body.append(h('div', { class: o.done ? 'good' : o.failed ? 'bad' : o.optional ? 'muted' : '' }, `${o.done ? '✔' : o.failed ? '✘' : '▸'} ${o.text}${o.optional ? ' (необязательно)' : ''}`));
+      t.append(h('h3', null, m.state.title || 'Кампания'));
+      for (const o of m.visible()) t.append(h('div', { class: o.done ? 'good' : o.failed ? 'bad' : o.optional ? 'muted' : '' }, `${o.done ? '✔' : o.failed ? '✘' : '▸'} ${o.text}${o.optional ? ' (необязательно)' : ''}`));
       const vac = sim.officers.vacancies();
-      if (vac.length) body.append(h('h3', null, 'Требуют решения'), ...vac.map((u) => h('div', { class: 'amber' }, `Нет командира: ${UNIT_NAMES[u]} — назначьте лично (Кадровые решения в разговоре).`)));
-      body.append(h('h3', null, 'Подсказка'), h('div', { class: 'muted pre' }, 'Приказы отдаются людям: подойдите и заговорите, либо снимите трубку телефона.\nОгонь — с планшета управления огнём (командный центр, КП батареи) или через командира орудия.\nКарта района показывает только то, что донесла разведка.'));
+      if (vac.length) t.append(h('h3', null, 'Требуют решения'), ...vac.map((u) => h('div', { class: 'amber' }, `Нет командира: ${UNIT_NAMES[u]} — назначьте лично (Кадровые решения в разговоре).`)));
+      t.append(h('h3', null, 'Подсказка'), h('div', { class: 'muted pre' }, 'Приказы отдаются людям: подойдите и заговорите, либо снимите трубку телефона.\nОгонь — с планшета управления огнём (командный центр, КП батареи) или через командира орудия.\nКарта района показывает только то, что донесла разведка.'));
     } else if (tab === 'messages') {
       const list = [...sim.radio.messages].filter((m) => m.delivered).reverse();
-      if (!list.length) body.append(h('div', { class: 'muted' }, 'Донесений нет.'));
+      if (!list.length) t.append(h('div', { class: 'muted' }, 'Донесений нет.'));
       const box = h('div', { class: 'list' });
       for (const m of list) {
         const open = openMsg === m.id;
@@ -83,18 +89,18 @@ const journal: PanelFn = (ui, body, arg, extra) => {
         if (open) item.append(h('div', { class: 'pre', style: 'margin-top:4px' }, m.body));
         box.append(item);
       }
-      body.append(box);
+      t.append(box);
     } else if (tab === 'orders') {
-      body.append(h('h3', null, 'Огневые задачи'));
+      t.append(h('h3', null, 'Огневые задачи'));
       const ms = [...sim.artillery.state.missions].reverse().slice(0, 8);
-      if (!ms.length) body.append(h('div', { class: 'muted' }, 'Огневых задач не было.'));
+      if (!ms.length) t.append(h('div', { class: 'muted' }, 'Огневых задач не было.'));
       for (const m of ms) {
-        body.append(h('div', { class: 'item' }, h('b', null, `${m.targetName} — ${SHELLS[m.shell].short}, ${m.fired}/${m.kind === 'suppress' ? '…' : m.rounds}`), h('small', null, `${stamp(m.t)} · ${m.status === 'active' ? 'выполняется' : m.status === 'done' ? 'выполнена' : 'отменена'}`), h('div', { class: 'pre muted' }, m.reports.slice(-6).join('\n'))));
+        t.append(h('div', { class: 'item' }, h('b', null, `${m.targetName} — ${SHELLS[m.shell].short}, ${m.fired}/${m.kind === 'suppress' ? '…' : m.rounds}`), h('small', null, `${stamp(m.t)} · ${m.status === 'active' ? 'выполняется' : m.status === 'done' ? 'выполнена' : 'отменена'}`), h('div', { class: 'pre muted' }, m.reports.slice(-6).join('\n'))));
       }
-      body.append(h('h3', null, 'Приказы'));
+      t.append(h('h3', null, 'Приказы'));
       const os = [...sim.command.orders].reverse().slice(0, 14);
-      if (!os.length) body.append(h('div', { class: 'muted' }, 'Приказов не отдавалось.'));
-      for (const o of os) body.append(h('div', { class: o.status === 'active' ? '' : 'muted' }, `${stamp(o.t)} — ${sim.command.summary(o)} [${o.status === 'active' ? 'действует' : o.status === 'done' ? 'выполнен' : 'снят'}]`));
+      if (!os.length) t.append(h('div', { class: 'muted' }, 'Приказов не отдавалось.'));
+      for (const o of os) t.append(h('div', { class: o.status === 'active' ? '' : 'muted' }, `${stamp(o.t)} — ${sim.command.summary(o)} [${o.status === 'active' ? 'действует' : o.status === 'done' ? 'выполнен' : 'снят'}]`));
     } else if (tab === 'roster') {
       const units: Record<string, NpcState[]> = {};
       for (const n of sim.npcs.list) {
@@ -102,36 +108,37 @@ const journal: PanelFn = (ui, body, arg, extra) => {
         (units[n.unit] ??= []).push(n);
       }
       for (const [u, list] of Object.entries(units)) {
-        body.append(h('h3', null, `${UNIT_NAMES[u]}${sim.officers.vacancy(u as any) ? ' — БЕЗ КОМАНДИРА' : ''}`));
+        t.append(h('h3', null, `${UNIT_NAMES[u]}${sim.officers.vacancy(u as any) ? ' — БЕЗ КОМАНДИРА' : ''}`));
         const box = h('div', { class: 'list' });
         for (const n of list.sort((a, b) => b.rank - a.rank)) {
           box.append(h('div', { class: 'item', onclick: () => ui.openPanel('personnel', n.id) }, h('b', { class: n.status === 'dead' ? 'bad' : n.status !== 'active' ? 'amber' : '' }, `${fullName(n)} ${n.first}`), h('small', null, `${n.position} · ${STATUS_NAMES[n.status]}${n.status === 'active' ? ' · ' + n.task : ''}`)));
         }
-        body.append(box);
+        t.append(box);
       }
     } else if (tab === 'cases') {
-      casesBody(ui, body);
+      casesBody(ui, t);
     } else if (tab === 'resources') {
-      resourcesBody(ui, body);
+      resourcesBody(ui, t);
     } else if (tab === 'guard') {
-      body.append(h('h3', null, 'Посты'));
+      t.append(h('h3', null, 'Посты'));
       for (const p of sim.guard.requiredPosts()) {
         const id = sim.guard.state.holder[p];
         const n = id ? sim.npcs.byId(id) : undefined;
-        body.append(h('div', null, `${sim.guard.postName(p)} — ${n ? fullName(n) : 'НЕ ЗАНЯТ'}`));
+        t.append(h('div', null, `${sim.guard.postName(p)} — ${n ? fullName(n) : 'НЕ ЗАНЯТ'}`));
       }
-      body.append(h('h3', null, 'Патрули'));
-      for (const p of sim.patrols.patrols) body.append(h('div', { class: sim.patrols.activeNow(p) ? '' : 'muted' }, `${p.name}: ${sim.patrols.routeName(p)}${sim.patrols.activeNow(p) ? '' : ' (не в смене)'} — ${p.lastReport}`));
-      body.append(h('h3', null, 'Журнал караула'));
+      t.append(h('h3', null, 'Патрули'));
+      for (const p of sim.patrols.patrols) t.append(h('div', { class: sim.patrols.activeNow(p) ? '' : 'muted' }, `${p.name}: ${sim.patrols.routeName(p)}${sim.patrols.activeNow(p) ? '' : ' (не в смене)'} — ${p.lastReport}`));
+      t.append(h('h3', null, 'Журнал караула'));
       const j = [...sim.guard.state.journal].reverse().slice(0, 30);
-      if (!j.length) body.append(h('div', { class: 'muted' }, 'Записей нет.'));
-      for (const e of j) body.append(h('div', null, `${stamp(e.t)} — ${e.text}`));
+      if (!j.length) t.append(h('div', { class: 'muted' }, 'Записей нет.'));
+      for (const e of j) t.append(h('div', null, `${stamp(e.t)} — ${e.text}`));
     } else if (tab === 'system') {
-      systemBody(ui, body, render);
+      systemBody(ui, t, render);
     }
   };
   render();
-  return { title: 'Журнал командира', refresh: () => (tab === 'guard' || tab === 'resources' || tab === 'orders') && render() };
+  // живые вкладки обновляются, только если что-то изменилось, и без сброса прокрутки
+  return { title: 'Журнал командира', refresh: () => (tab === 'guard' || tab === 'resources' || tab === 'orders') && softRefresh(body, fill) };
 };
 
 function casesBody(ui: UIManager, body: HTMLElement): void {
@@ -208,8 +215,7 @@ const personnel: PanelFn = (ui, body, id: string) => {
   const sim = ui.game.sim;
   const n = sim.npcs.byId(id);
   if (!n) return { title: 'Личное дело' };
-  const render = (): void => {
-    clear(body);
+  const fill = (out: HTMLElement): void => {
     const t = h('table');
     const row = (a: string, b: any) => t.append(h('tr', null, h('th', null, a), h('td', null, b)));
     row('Фамилия, имя', `${n.last} ${n.first}`);
@@ -230,14 +236,14 @@ const personnel: PanelFn = (ui, body, id: string) => {
     row('Вещевая карточка', `сапоги ${n.traits.boot}-го размера${n.traits.leftHanded ? '; левша' : ''}`);
     const off = sim.relations.hasOffence(n);
     if (off) row('Проступок', h('span', { class: 'amber' }, off));
-    body.append(t, h('h3', null, 'Послужной список'), h('div', { class: 'pre' }, n.history.join('\n')));
+    out.append(t, h('h3', null, 'Послужной список'), h('div', { class: 'pre' }, n.history.join('\n')));
     const mem = n.memory.slice(-6).reverse();
-    if (mem.length) body.append(h('h3', null, 'Что у него на памяти'), h('div', { class: 'pre muted' }, mem.map((m) => `${stamp(m.t)} — ${m.text}`).join('\n')));
+    if (mem.length) out.append(h('h3', null, 'Что у него на памяти'), h('div', { class: 'pre muted' }, mem.map((m) => `${stamp(m.t)} — ${m.text}`).join('\n')));
     const ev = sim.ci.evidenceFor(n.id);
-    if (ev.length) body.append(h('h3', null, 'Материалы контрразведки'), h('div', { class: 'pre' }, ev.map((e) => `${stamp(e.t)} — ${e.text} (${e.source})`).join('\n')));
+    if (ev.length) out.append(h('h3', null, 'Материалы контрразведки'), h('div', { class: 'pre' }, ev.map((e) => `${stamp(e.t)} — ${e.text} (${e.source})`).join('\n')));
   };
-  render();
-  return { title: `Личное дело: ${fullName(n)}`, refresh: render };
+  fill(body);
+  return { title: `Личное дело: ${fullName(n)}`, refresh: () => softRefresh(body, fill) };
 };
 
 // ------------------------------------------------------------------ документы

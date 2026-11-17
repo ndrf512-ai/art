@@ -300,6 +300,157 @@ const scenarios = {
     }
     return h;
   },
+  async firetouch() {
+    const h = await boot('autostart=m&touch=1&q=' + (process.env.Q || 'minimal'));
+    const cdp = await h.page.context().newCDPSession(h.page);
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: +(process.env.CPU || 4) });
+    await h.clickText('Продолжить');
+    await h.ev(() => {
+      const g = window.__game;
+      const f = g.sim.missions.state.flags;
+      f.inspected_gun1 = true; f.report_guard = true;
+      for (const r of ['adjutant', 'battery_cmd', 'security_chief', 'ci_officer']) f['met_' + r] = true;
+      const p = g.sim.player; p.x = 67.5; p.z = 35; p.zone = 'command'; p.indoor = true;
+    });
+    await h.sim(3);
+    if (await h.page.locator('button:has-text("Продолжить")').count()) await h.clickText('Продолжить');
+    await h.sim(16);
+    // живой цикл кадров с замером пауз между кадрами
+    await h.ev(() => {
+      const g = window.__game;
+      window.__stop = false;
+      window.__gaps = [];
+      let last = performance.now();
+      const mon = () => { const t = performance.now(); window.__gaps.push(t - last); last = t; if (!window.__stop) requestAnimationFrame(mon); };
+      requestAnimationFrame(mon);
+      g.last = performance.now();
+      requestAnimationFrame(g.frame);
+      g.ui.openPanel('fire');
+    });
+    await h.page.waitForTimeout(1500);
+    await h.page.locator('.right .item:has-text("склад")').first().tap();
+    await h.page.waitForTimeout(400);
+    await h.page.locator('button:has-text("Открыть огонь")').first().tap();
+    await h.page.waitForTimeout(300);
+    const ordered = await h.ev(() => window.__game.sim.artillery.state.missions.length);
+    console.log('задач после касания «Открыть огонь»:', ordered);
+    await h.ev(() => { window.__game.setWarp(12); window.__gaps = []; });
+    // ждём выстрела
+    for (let i = 0; i < 120; i++) {
+      await h.page.waitForTimeout(500);
+      const f = await h.ev(() => window.__game.sim.artillery.state.missions.reduce((a, m) => a + m.fired, 0));
+      if (f >= 1) break;
+    }
+    await h.page.waitForTimeout(1500);
+    const shot = await h.ev(() => { const g = [...window.__gaps].sort((a, b) => a - b); return { fired: window.__game.sim.artillery.state.missions.reduce((a, m) => a + m.fired, 0), median: Math.round(g[g.length >> 1]), p90: Math.round(g[Math.floor(g.length * 0.9)]), max: Math.round(g[g.length - 1]), frames: g.length }; });
+    console.log('выстрел:', JSON.stringify(shot));
+    await h.ev(() => window.__game.setWarp(1));
+    // поправка: два касания «+» по дальности и «Передать поправку»/«Поправка и ещё выстрел»
+    const plus = h.page.locator('.right .stepper').filter({ hasText: 'дальше' }).or(h.page.locator('.right .stepper').filter({ hasText: /^.*0.*$/ })).first();
+    const corrRow = h.page.locator('.right h3:has-text("Поправки")');
+    console.log('раздел поправок виден:', await corrRow.count());
+    const steppers = h.page.locator('.right .stepper');
+    const n = await steppers.count();
+    // последний-1 степпер — дальность в разделе поправок
+    const rangeStepper = steppers.nth(n - 2);
+    await rangeStepper.locator('button:has-text("+")').tap();
+    await rangeStepper.locator('button:has-text("+")').tap();
+    await h.page.waitForTimeout(1200);
+    await h.page.locator('.right button:has-text("оправк")').first().tap();
+    await h.page.waitForTimeout(500);
+    const corr = await h.ev(() => window.__game.sim.artillery.state.missions.map((m) => m.corrRange + '/' + m.status + '/' + m.rounds));
+    console.log('поправки в задачах:', JSON.stringify(corr));
+    // прокрутка не должна сбрасываться обновлениями
+    await h.ev(() => { const s = document.querySelector('.right'); s.scrollTop = 300; window.__st = s.scrollTop; });
+    await h.page.waitForTimeout(3500);
+    const st = await h.ev(() => [window.__st, document.querySelector('.right').scrollTop]);
+    console.log('прокрутка до/после 3,5 с обновлений:', JSON.stringify(st));
+    await h.page.screenshot({ path: OUT + '80_fire_touch.png', timeout: 180000 });
+    await h.ev(() => { window.__stop = true; });
+    return h;
+  },
+  async monkey() {
+    const h = await boot('autostart=f&q=low');
+    await h.clickText('Продолжить');
+    const report = await h.ev(async () => {
+      const g = window.__game;
+      const sim = g.sim;
+      const ui = g.ui;
+      const errors = [];
+      const tryit = (what, fn) => { try { fn(); } catch (e) { errors.push(what + ': ' + (e && e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : e)); } };
+      let chosen = 0;
+      // все пункты диалогов у людей разных должностей (два уровня меню)
+      const roles = ['adjutant', 'battery_cmd', 'security_chief', 'ci_officer', 'quartermaster', 'engineer', 'doctor', 'gun_cmd', 'guard_sgt', 'patrol_leader', 'guard', 'mech_chief', 'radio_op', 'clerk', 'cook', 'driver'];
+      const skip = new Set(['close', 'p:leave', 'p:arrest', 'i:handover', 'v:deny', 'tr:gun1', 'tr:gun2', 'tr:gun3', 'tr:guard']);
+      for (const role of roles) {
+        const n = sim.npcs.list.find((x) => x.role === role && x.status === 'active');
+        if (!n) continue;
+        tryit('open ' + role, () => ui.showDialogue(sim.dialogue.open(n.id)));
+        const top = sim.dialogue.view();
+        if (!top) continue;
+        for (const o of top.options) {
+          if (skip.has(o.id) || o.disabled) continue;
+          tryit(role + ' ' + o.id, () => {
+            sim.dialogue.close();
+            ui.showDialogue(sim.dialogue.open(n.id));
+            const v = sim.dialogue.choose(o.id);
+            chosen++;
+            ui.showDialogue(v);
+            if (v && o.id.startsWith('m:')) {
+              for (const o2 of v.options) {
+                if (skip.has(o2.id) || o2.disabled || o2.id === 'back') continue;
+                if (o2.id.startsWith('m:')) continue;
+                const v2 = sim.dialogue.choose(o2.id);
+                chosen++;
+                ui.showDialogue(v2);
+                sim.dialogue.close();
+                ui.showDialogue(sim.dialogue.open(n.id));
+                sim.dialogue.choose(o.id);
+              }
+            }
+            ui.closePanel();
+          });
+        }
+        tryit('close ' + role, () => ui.closeDialogue());
+      }
+      // телефон
+      tryit('phone', () => { ui.showDialogue(sim.dialogue.openPhone()); for (const o of sim.dialogue.view().options) { if (o.id === 'close') continue; ui.showDialogue(sim.dialogue.openPhone()); ui.showDialogue(sim.dialogue.choose(o.id)); } ui.closeDialogue(); });
+      // все окна и вкладки
+      for (const tab of ['objectives', 'messages', 'orders', 'roster', 'cases', 'resources', 'guard', 'system']) tryit('journal ' + tab, () => { ui.openPanel('journal', { tab }); ui.update(1.2); ui.closePanel(); });
+      for (const p of ['map', 'fire', 'archive', 'patrols', 'supply', 'rest', 'alert']) tryit('panel ' + p, () => { ui.openPanel(p); ui.update(1.2); ui.update(1.2); });
+      // кнопки внутри окон: нажимаем все, кроме выхода/перезапуска
+      const badBtn = /Выйти|главное меню|Перезапуск|Применить|Загрузить|Спать|Отдохнуть/;
+      for (const p of ['patrols', 'supply', 'alert', 'archive']) {
+        tryit('buttons ' + p, () => {
+          ui.openPanel(p);
+          const btns = Array.from(document.querySelectorAll('.panel .body button')).filter((b) => !badBtn.test(b.textContent));
+          for (const b of btns.slice(0, 25)) { if (b.isConnected) b.click(); }
+          ui.update(1.2);
+          ui.closePanel();
+        });
+      }
+      tryit('archive items', () => { ui.openPanel('archive'); const items = Array.from(document.querySelectorAll('.panel .item')).slice(0, 6); for (const it of items) it.click(); ui.closePanel(); });
+      // осмотр всех объектов
+      for (const it of sim.layout.interactables) {
+        if (it.kind === 'bed') continue;
+        tryit('interact ' + it.id, () => {
+          ui.interact({ kind: 'object', id: it.id, label: it.label, hint: '', obj: it });
+          const btns = Array.from(document.querySelectorAll('.panel .body button')).filter((b) => /Осмотреть|первую очередь/.test(b.textContent));
+          for (const b of btns) b.click();
+          ui.closePanel();
+          ui.closeDialogue();
+        });
+      }
+      // мир живёт с открытыми окнами
+      tryit('sim with panels', () => { ui.openPanel('fire'); for (let i = 0; i < 600; i++) { sim.update(0.1); if (i % 10 === 0) ui.update(1.0); } ui.closePanel(); });
+      tryit('save/load', () => { g.saveSlot('slot2'); g.loadSlot('slot2'); });
+      return { errors, chosen };
+    });
+    console.log('пунктов диалогов выбрано:', report.chosen);
+    console.log('ошибок:', report.errors.length);
+    for (const e of report.errors.slice(0, 30)) console.log(' -', e);
+    return h;
+  },
 };
 
 (async () => {

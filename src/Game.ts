@@ -97,7 +97,8 @@ export class Game implements GameApi {
     this.sr.sun.shadow.camera.layers.enable(1);
     this.chars = new CharacterView(this.sim, this.sr.scene, this.sr.camera, this.world, this.M.black1, this.quality);
     this.machines = new MachineView(this.sim, this.sr.scene, this.M);
-    this.fx = new Effects(this.sr.scene, Math.round(140 * this.quality.particles));
+    const minimal = this.quality.level === 'minimal';
+    this.fx = new Effects(this.sr.scene, Math.round(140 * this.quality.particles), minimal ? 1 : 3, minimal ? 0 : 2);
     this.player = new PlayerController(this.sim, this.sr.camera, canvas);
     this.chars.gait = () => ({ phase: this.player.stepPhase, speed: this.player.speed });
     this.ui = new UIManager(uiRoot, this);
@@ -173,7 +174,18 @@ export class Game implements GameApi {
       const item = this.prepQueue.shift()!;
       try {
         if (item instanceof THREE.Texture) r.initTexture(item);
-        else r.compile(item, this.sr.camera, this.sr.scene);
+        else {
+          // compile() обходит только видимые объекты — на время включаем скрытые
+          const hidden: THREE.Object3D[] = [];
+          item.traverse((o) => {
+            if (!o.visible) {
+              hidden.push(o);
+              o.visible = true;
+            }
+          });
+          r.compile(item, this.sr.camera, this.sr.scene);
+          for (const o of hidden) o.visible = false;
+        }
       } catch (e) {
         console.warn('Подготовка графики:', e);
       }

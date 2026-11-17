@@ -24,7 +24,7 @@ interface Fire {
   id: string;
   x: number;
   z: number;
-  light: THREE.PointLight;
+  light: THREE.PointLight | null;
   t: number;
 }
 
@@ -35,7 +35,10 @@ export class Effects {
   private glowMap: THREE.Texture;
   private flashes: { light: THREE.PointLight; t: number; max: number; i: number }[] = [];
   private fires: Fire[] = [];
-  private tracers: { line: THREE.Line; t: number }[] = [];
+  /** Источники света пожаров и трассеры созданы заранее: новый источник света
+   *  в сцене заставил бы перекомпилировать все материалы — на телефоне это зависание. */
+  private fireLights: THREE.PointLight[] = [];
+  private tracers: { line: THREE.Line; pos: THREE.BufferAttribute; t: number }[] = [];
   private craters: THREE.Mesh[] = [];
   private craterI = 0;
   private rain: THREE.LineSegments;
@@ -50,6 +53,8 @@ export class Effects {
   constructor(
     private scene: THREE.Scene,
     count: number,
+    flashLights = 3,
+    fireLights = 2,
   ) {
     this.smokeMap = smokeTex(3);
     this.glowMap = softDot('rgba(255,240,200,1)', 'rgba(255,170,70,0.35)');
@@ -60,10 +65,26 @@ export class Effects {
       scene.add(sprite);
       this.pool.push({ sprite, mat, life: 0, max: 1, vx: 0, vy: 0, vz: 0, s0: 1, s1: 1, a: 1, drag: 0, grav: 0 });
     }
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < flashLights; i++) {
       const light = new THREE.PointLight(0xffc070, 0, 60, 1.6);
       scene.add(light);
       this.flashes.push({ light, t: 0, max: 0, i: 0 });
+    }
+    for (let i = 0; i < fireLights; i++) {
+      const light = new THREE.PointLight(0xff8a3a, 0, 22, 1.5);
+      scene.add(light);
+      this.fireLights.push(light);
+    }
+    const tracerMat = new THREE.LineBasicMaterial({ color: 0xffe0a0, transparent: true, opacity: 0.7 });
+    for (let i = 0; i < 8; i++) {
+      const g = new THREE.BufferGeometry();
+      const pos = new THREE.BufferAttribute(new Float32Array(6), 3);
+      g.setAttribute('position', pos);
+      const line = new THREE.Line(g, tracerMat);
+      line.visible = false;
+      line.frustumCulled = false;
+      scene.add(line);
+      this.tracers.push({ line, pos, t: 0 });
     }
     const craterGeo = new THREE.CircleGeometry(1, 14);
     craterGeo.rotateX(-Math.PI / 2);
@@ -135,6 +156,7 @@ export class Effects {
   }
 
   private flash(x: number, y: number, z: number, intensity: number, dur: number, color = 0xffc070): void {
+    if (!this.flashes.length) return;
     const f = this.flashes.reduce((a, b) => (a.t <= b.t ? a : b));
     f.light.position.set(x, y, z);
     f.light.color.setHex(color);
@@ -179,10 +201,12 @@ export class Effects {
   }
 
   tracer(x: number, z: number, tx: number, tz: number): void {
-    const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x, 1.4, z), new THREE.Vector3(tx, 1.2, tz)]);
-    const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xffe0a0, transparent: true, opacity: 0.7 }));
-    this.scene.add(line);
-    this.tracers.push({ line, t: 0.07 });
+    const tr = this.tracers.reduce((a, b) => (a.t <= b.t ? a : b));
+    tr.pos.setXYZ(0, x, 1.4, z);
+    tr.pos.setXYZ(1, tx, 1.2, tz);
+    tr.pos.needsUpdate = true;
+    tr.line.visible = true;
+    tr.t = 0.07;
     this.flash(x, 1.5, z, 40, 0.06);
   }
 
@@ -190,20 +214,20 @@ export class Effects {
     const i = this.fires.findIndex((f) => f.id === id);
     if (!on) {
       if (i >= 0) {
-        this.scene.remove(this.fires[i].light);
+        const l = this.fires[i].light;
+        if (l) l.intensity = 0;
         this.fires.splice(i, 1);
       }
       return;
     }
     if (i >= 0) return;
-    const light = new THREE.PointLight(0xff8a3a, 60, 22, 1.5);
-    light.position.set(x, 1.6, z);
-    this.scene.add(light);
+    const light = this.fireLights.find((l) => !this.fires.some((f) => f.light === l)) ?? null;
+    if (light) light.position.set(x, 1.6, z);
     this.fires.push({ id, x, z, light, t: 0 });
   }
 
   clearFires(): void {
-    for (const f of this.fires) this.scene.remove(f.light);
+    for (const f of this.fires) if (f.light) f.light.intensity = 0;
     this.fires.length = 0;
   }
 
@@ -237,19 +261,14 @@ export class Effects {
         f.light.intensity = f.i * Math.max(0, f.t / f.max);
       } else f.light.intensity = 0;
     }
-    for (let i = this.tracers.length - 1; i >= 0; i--) {
-      const tr = this.tracers[i];
+    for (const tr of this.tracers) {
+      if (tr.t <= 0) continue;
       tr.t -= dt;
-      if (tr.t <= 0) {
-        this.scene.remove(tr.line);
-        tr.line.geometry.dispose();
-        (tr.line.material as THREE.Material).dispose();
-        this.tracers.splice(i, 1);
-      }
+      if (tr.t <= 0) tr.line.visible = false;
     }
     for (const f of this.fires) {
       f.t -= dt;
-      f.light.intensity = 45 + Math.random() * 35;
+      if (f.light) f.light.intensity = 45 + Math.random() * 35;
       if (f.t <= 0) {
         f.t = 0.07;
         this.emit(f.x + (Math.random() - 0.5) * 1.6, 0.5, f.z + (Math.random() - 0.5) * 1.6, 0, 2.5 + Math.random() * 2, 0, 0.7, 1.4, 0.5, 0xff9a40, 0.9, true, 0.2);

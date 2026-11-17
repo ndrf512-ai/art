@@ -44,3 +44,16 @@ export function stepper(get: () => number, set: (v: number) => void, step: numbe
     }, label);
   return h('span', { class: 'stepper' }, bigStep ? mk(-bigStep, '«') : null, mk(-step, '−'), val, mk(step, '+'), bigStep ? mk(bigStep, '»') : null);
 }
+
+/**
+ * Мягкое обновление: содержимое строится заново в отдельном элементе и подставляется,
+ * только если текст изменился; прокрутка сохраняется. Так кнопки не пересоздаются под пальцем.
+ */
+export function softRefresh(container: HTMLElement, build: (target: HTMLElement) => void): void {
+  const tmp = document.createElement('div');
+  build(tmp);
+  if (tmp.textContent === container.textContent) return;
+  const top = container.scrollTop;
+  container.replaceChildren(...Array.from(tmp.childNodes));
+  container.scrollTop = top;
+}
